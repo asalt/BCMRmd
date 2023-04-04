@@ -1,0 +1,283 @@
+---
+title: "test_MASIC"
+author: "AlexSaltman"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# libraries
+```{r}
+library(fs)
+library(knitr)
+library(tibble)
+library(stringr)
+library(magrittr)
+library(purrr)
+library(pillar)
+library(readr)
+library(purrr)
+```
+
+
+## 
+# logging
+
+```{r}
+LOGFILE <- "test_MASIC.log"
+TESTSDIR <- fs::path(".")
+
+data_frame <- tibble
+create_summary <- function(input) {
+  if (is.data.frame(input)) {
+    .x <- pillar::glimpse(input)
+    .log <- list(names(input), input)
+    return(.log)
+  } else if (is.list(input)) {
+    if (length(input) == 0) {
+      return("Empty list")
+    }
+    input_summary <- lapply(input, create_summary) # recursive apply the next level of `input` to self
+    names(input_summary) <- names(input)
+    return(input_summary)
+  } else {
+    return(summary(input))
+  }
+}
+
+
+list(
+  list("a", "b", "c"),
+  list(1, 2, 3)
+) %>% create_summary()
+
+
+list(
+  list("a" = data_frame(rnorm(10)), "b" = data_frame(rnorm(10)), "c" = data_frame()),
+  list(1, 2, 3)
+) %>% create_summary()
+
+
+
+
+
+log_variable <- function(variable_name, variable_value) {
+  summary_value <- create_summary(variable_value)
+  sink(LOGFILE, append = TRUE)
+  cat("Logged Variables\n")
+  # print(logged_variables)
+  print(variable_name)
+  print(summary_value)
+  cat("\n")
+  sink()
+  # data.frame(Name = variable_name, Value = toString(variable_value), stringsAsFactors = FALSE)
+  # c(variable_name, summary_value) %>% map(message)
+  return(variable_value)
+}
+log_variable("hi", "hi")
+log_variable("hi", c(1, 2, 3))
+
+x <- 5
+y <- 10
+z <- x * y
+
+# tests that should work:
+# logged_variables <- rbind(
+#   log_variable("x", x),
+#   log_variable("y", y),
+#   log_variable("z", z)
+# )
+# log_variable(logged_variables)
+# log_variable(
+#   "some variable",
+#   list(
+#     "a"= data_frame(rnorm(10)),
+#     "b"= data_frame(rnorm(10))
+#   )
+# )
+# kable(logged_variables, caption = "Logged Variables", col.names = c("Variable", "Value"))
+```
+
+
+# constants
+
+```{r}
+
+NUM_ROWS <- 300
+
+TEST_DATA_COLUMNS <- list()
+
+COLS_SICstats <- c(
+  "Dataset",
+  "ParentIonIndex",
+  "MZ",
+  "SurveyScanNumber",
+  "FragScanNumber",
+  "OptimalPeakApexScanNumber",
+  "PeakApexOverrideParentIonIndex",
+  "CustomSICPeak",
+  "PeakScanStart",
+  "PeakScanEnd",
+  "PeakScanMaxIntensity",
+  "PeakMaxIntensity",
+  "PeakSignalToNoiseRatio",
+  "FWHMInScans",
+  "PeakArea",
+  "ParentIonIntensity",
+  "PeakBaselineNoiseLevel",
+  "PeakBaselineNoiseStDev",
+  "PeakBaselinePointsUsed",
+  "StatMomentsArea",
+  "CenterOfMassScan",
+  "PeakStDev",
+  "PeakSkew",
+  "PeakKSStat",
+  "StatMomentsDataCountUsed",
+  "InterferenceScore"
+)
+TEST_DATA_COLUMNS %<>% append(list(a_COLS_SICstats = COLS_SICstats))
+TEST_DATA_COLUMNS %<>% append(list(b_COLS_SICstats = COLS_SICstats))
+
+COLS_REPORTER_IONS <- c(
+  "Dataset",
+  "ScanNumber",
+  "Collision",
+  "Mode",
+  "ParentIonMZ",
+  "BasePeakIntensity",
+  "BasePeakMZ",
+  "ReporterIonIntensityMax",
+  "Ion_126.128",
+  "Ion_127.125",
+  "Ion_127.131",
+  "Ion_128.128",
+  "Ion_128.134",
+  "Ion_129.131",
+  "Ion_129.138",
+  "Ion_130.135",
+  "Ion_130.141",
+  "Ion_131.138",
+  "Ion_131.144",
+  "Weighted Avg Pct Intensity Correction"
+)
+TEST_DATA_COLUMNS %<>% append(list(COLS_REPORTER_IONS1 = COLS_REPORTER_IONS))
+TEST_DATA_COLUMNS %<>% append(list(COLS_REPORTER_IONS2 = COLS_REPORTER_IONS))
+```
+# make data
+xx
+
+```{r}
+
+# COLNAMES <- c("",
+#               ""
+#               )
+# column_names <- SICstats_COLUMNS
+# num_rows <- NROWS
+make_test_data <- function(column_names, num_rows) {
+  # map_dfc because we want to return a dataframe based on the column names we are feeding in
+  # runif <- random draw uniform distribution
+  map_dfc(
+    column_names,
+    # ~  = inline expression
+    # !! = eval expression
+    # .x = a column name
+    # := = assignment
+    ~ tibble(!!.x := runif(num_rows))
+  ) %>%
+    as_tibble()
+}
+
+(
+  make_test_data(list("a", "b", "c"), num_rows = 10)
+)
+```
+xx
+make actual test data
+```{r}
+
+TEST_DATA <- TEST_DATA_COLUMNS %>% map(
+  ~ make_test_data(.x, num_rows = NUM_ROWS)
+)
+
+
+.x <- log_variable(names(TEST_DATA), TEST_DATA)
+
+
+# .testdatafilename <- glue::glue("_MASIC_testdata_", names(TEST_DATA), ".txt")
+
+(
+  .testdatafilenames <- names(TEST_DATA) %>% str_c("1111_MASIC_testdata_", ., ".txt")
+)
+
+# @log_variable(".testdatafilename", .testdatafilenames)
+.x <- map2(
+  TEST_DATA, # .x
+  .testdatafilenames,
+  ~ write_tsv(.x, file = .y)
+)
+```
+# test
+## hack
+```{r, label="render"} 
+#llll%%```{r, label="render", child="../BCMRmd/MASIC.Rmd"}
+.pathwd <- fs::path_wd()
+library(fs)
+
+#current_file <- knitr::current_input()
+# .path<- fs::path_abs("../BCMRmd/MASIC.Rmd")
+# rmarkdown::render(.path)
+.outputtestresults <- c(fs::path_wd(), "MASIC_test_results.html") %>% path_join(parts=.)
+
+rmarkdown::render("../BCMRmd/MASIC.Rmd",
+                  output_file=.outputtestresults,
+  params = list(
+    ROOTPATH = as.character(.pathwd),
+    subtitle = "report test from randomly generated date"
+  ),
+  
+)
+```
+
+```{r}
+FILE <- c("..", "BCMRmd", "MASIC.Rmd") %>% fs::path_join(parts = .)
+# fs::path_join(parts=c("..", 'BCMRmd', "MASIC.Rmd"))
+params <- list(
+  ROOTPATH = fs::path_wd(),
+  output = list(
+    html_document = list(toc = TRUE)
+  )
+)
+
+
+# rmarkdown::render(FILE,
+#                   params = params
+#                   #params = params,
+#                   #envir = new.env()
+#                   )
+.cmd <- " x "
+```
+
+# clean 
+
+```{r}
+clean <- function() {
+  (
+    .testdatafilenames %>% map(fs::file_exists)
+  )
+  (
+    .testdatafilenames %>% map(fs::file_delete)
+  )
+  (
+    .testdatafilenames %>% map(fs::file_exists)
+  )
+}
+# .testdatafilenames <- names(TEST_DATA) %>% map(~glue::glue("1111_MASIC_testdata_", .x, ".txt"))
+```
+
+
+# test
+
+```{r}
+
+clean()
+```
+

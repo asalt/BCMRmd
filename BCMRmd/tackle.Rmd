@@ -6,6 +6,8 @@ output: html_document
 params:
   color: "PDXModel"
   marker: "plex"
+  CLUSTER_RANGE_LOWER: 3 
+  CLUSTER_RANGE_HIGHER: 13
 #  ROOTPATH: "`r fs::path_wd('.')`"
 ---
 
@@ -38,7 +40,6 @@ gct_files <- fs::dir_ls(
 gcts <- gct_files %>% 
 purrr::map(
   cmapR::parse_gctx
-  
 )
 
 ```
@@ -61,12 +62,26 @@ dist_no_na <- function(mat) {
   edist <- dist(mat)
   return(edist)
 }
+make_new_gct <- function(gct, mat){
+  # make a new gct object with the same metadata as the original
+  new("GCT", mat=mat,
+      rid = gct@rid,
+      cid=gct@cid,
+      rdesc=gct@rdesc,
+      cdesc=gct@cdesc,
+        )
+}
 ```
 
 
 ```{r, label='tackle.cdesc'}
 .gct <- gcts[[1]]
-.gct@cdesc %>% gt::gt()
+#.gct@cdesc
+.gct@cdesc %>% 
+  select(recno, runno, searchno, label, everything()) %>% 
+  gt::gt(
+  caption="metadata"
+)
 
 ```
 
@@ -103,31 +118,53 @@ gcts %>% map(
 ```
 
 ## cluster
+### heatmap
+```{r}
 
-```{r, label="tackle.cluster"}
-.gct <- gcts[[1]]
 
 ```
 
-## kmeans
 
 ```{r}
+.gct <- gcts[[1]]
+# all below analysis is written to analyze 1 gct object
+```
+ all below analysis is written to analyze 1 gct object
+
+
+```{r, label="tackle.cluster"}
+
+```
+
+### kmeans
+
+here z score and any other xformations take place
+```{r}
 # from https://www.tidymodels.org/learn/statistics/k-means/
+CLUSTER_RANGE <- seq(params$CLUSTER_RANGE_LOWER, params$CLUSTER_RANGE_HIGHER, 1)
+#CLUSTER_RANGE=seq(4,14)
 
-#.tocluster <- mat(dat) 
-.tocluster <- mat(.gct)
-.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
 
-kclusts <-  tibble(n = 1:6) %>%
+# if z score is true
+# what's easier way to do this?
+.forcluster <- mat(.gct)
+.forcluster %<>% apply(MARGIN=1, FUN=myzscore) %>% t() %>% as.matrix()
+colnames(.forcluster) <- colnames(mat(.gct))
+.gct_zscored <- make_new_gct(.gct, .forcluster)
+#colnames(.forcluster) <- .gct@cid
+#.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
+
+kclusts <-  tibble(n=seq(CLUSTER_RANGE)) %>%
   mutate(
     #kclust = map(n, ~.cluster_func(n=.x)),
-    kclust = map(n, ~kmeans(.tocluster,centers=.x))
+    kclust = map(n, ~kmeans(mat(.gct_zscored), centers=.x))
   ) 
+
 kclusts %<>% 
   mutate(
     tidied = map(kclust, tidy),
     glanced = map(kclust, glance),
-    augmented = map(kclust, augment, .tocluster)
+    augmented = map(kclust, augment, .forcluster)
   
 )
 ```
@@ -152,61 +189,171 @@ clusterings <-
 ggplot(clusterings, aes(n, tot.withinss)) +
   geom_line() +
   geom_point() +
-  scale_x_discrete(limits=seq(1, 9,1) %>% as.factor() )
+  scale_x_discrete(limits=seq(CLUSTER_RANGE) %>% as.factor() ) +
+  ggpubr::theme_pubclean()
   #scale_x_discrete(limits=breaks_pretty())
-  #ggpubr::theme_pubclean()
   #breaks_pretty() +
+
+```
+
+```{r}
+elbow_cluster_sel <- findElbowPoint(clusterings$tot.withinss)
+#.elbow <- findElbowPoint(.pcaobj$variance)
 ```
 
 
 ```{r}
+chosen_cluster <- assignments %>% filter(n==elbow_cluster_sel)
+```
 
-ComplexHeatmap::Heatmap(
-  mat(.gct) %>% head(30)
+
+### cluster
+```{r}
+
+
+.negsel <- c('sample', 'plex', 'recno', 'label', 'id', 'runno', 'searchno', 'assay', 'replicate')
+.column_df <- .gct@cdesc %>% select(-any_of(.negsel))
+# kmeans logic
+library(ComplexHeatmap)
+
+
+.color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
+
+# fix this maybe if better
+for (col in colnames(.column_df)){
+  #print(col)
+    names(.color_list[[col]]) <-  unique(.column_df[[col]])
+}
+
+.top_annotation = columnAnnotation( df = .column_df, col = .color_list )
+
+
+.make_heatmap_row_cluster <- function(.x, ...){
+  
+  #.row_annot <- rowAnnotation(.x$.cluster)
+  .samplenames <- .gct@cid
+  
+  .h <- ComplexHeatmap::Heatmap(
+    .x %>% dplyr::select(.samplenames),
+    row_split = .x$.cluster,
+    #.forcluster %>% head(300),
+    #top_annotation = .top_annotation,
+    clustering_distance_rows = dist_no_na,
+    clustering_distance_columns =  dist_no_na,
+    column_title_side="top",
+    column_title_rot = 0,
+    column_names_gp = gpar(fontsize=9),
+    border=TRUE,
+    use_raster=T,
+    show_row_names=F,
+    ...
 )
+  .h
+}
+
+
+#.X <- chosen_cluster %>% select(.gct@cid) # grab all the numerical values from the dataframe with the chosen cluster
+chosen_cluster %>% .make_heatmap_row_cluster() %>% print
 
 ```
 
 ## pca
 ```{r, label="tackle.PCA"}
 # from https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
+.forpca <- mat(.gct)
+#.forpca
+#(.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
+.rownames<-apply(.gct@rdesc, 1, paste, collapse = " ")
+rownames(.forpca) <- .rownames
+#.gct@rdesc %>% head %>% rowwise() %>% mutate(x=str_c(everything(  )))
+#.gct@rdesc[.gct@rdesc == rownames(.forpca)]
+
 library(PCAtools)
 print('pca')
-.p <- PCAtools::pca(
-  mat(.gct) ,
+.pcaobj <- PCAtools::pca(
+  .forpca,
   metadata = .gct@cdesc
 )
 ```
 
 ```{r}
-screeplot(.p, axisLabSize = 18, titleLabSize = 22, components = 1:10)
+
+.elbow <- findElbowPoint(.pcaobj$variance)
+screeplot(.pcaobj,
+          components = 1:10,
+          axisLabSize = 18,
+          titleLabSize = 22,
+          vline = .elbow
+  ) +
+          geom_label(aes(x = .elbow + 1, y = 50,
+                  label = 'Elbow method', vjust = -1, size = 8)
+          )
 
 ```
 
-```{r}
-biplot(.p)
+```{r, label=pca-biplot, fig.width=6, fig.height=6}
+# https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
+mybiplot <- function(.pcaobj, ...) biplot(
+       .pcaobj,
+       showLoadings = T,
+       ntopLoadings=5,
+       sizeLoadingsNames = 3,
+       hline=0, 
+       vline=0,
+       colby="SampleType",
+       #shape='OrganSite',
+       shapekey=NULL,
+       ellipse=T,
+       legendPosition = "right",
+       ...
+       )
+mybiplot(.pcaobj, x="PC1", y="PC2")
+mybiplot(.pcaobj, x="PC1", y="PC3")
+# biplot(.pca,
+#        x="PC1",
+#        y="PC2",
+#        showLoadings = T,
+#        ntopLoadings=5,
+#        sizeLoadingsNames = 3,
+#        colby="SampleType",
+#        #shape='OrganSite',
+#        shapekey=NULL,
+#        ellipse=T,
+#        legendPosition = "top"
+#        )
 
 ```
 
-```{r}
-.p %>%  pairsplot()
-```
-```{r}
-.p %>% plotloadings(labSize = 3)
+```{r, label=pca-biplot2_3, fig.width=6, fig.height=6}
 
+mybiplot(.pcaobj, x="PC2", y="PC3")
+#.pca %>% airsplot()
+```
+```{r, fig.width=7, fig.height=7}
+myplotloadings <- function(.pcaobj, ...) plotloadings(
+  .pcaobj,
+  rangeRetain = .01,
+  ...
+)
+.pcaobj %>% myplotloadings(labSize = 3)
+
+```
+```{r, fig.width=7, fig.height=7}
+
+.pcaobj %>% myplotloadings(labSize = 3, absolute=T )
 ```
 
 
 ```{r}
 # not sure what this means for non-numeric
-.p %>% eigencorplot(
-  metavars = c(
-    "SampleType",
-    "OrganSite",
-    "PDXModel",
-    #"plex"
-  )
-)
+# .p %>% eigencorplot(
+#   metavars = c(
+#     "SampleType",
+#     "OrganSite",
+#     "PDXModel",
+#     #"plex"
+#   )
+# )
 ```
 
 ## {-}

@@ -5,8 +5,8 @@ date: "`r Sys.Date()`"
 output: html_document
 params:
   method:
-    value: PAM # kmeans, pam
-    options: [kmeans, PAM]
+    value: pam # kmeans, pam
+    options: [kmeans, pam, banditpam]
   cluster_rows:
     value: true
   cluster_columns:
@@ -48,8 +48,8 @@ if (!exists("gct")){
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
   .cdesc <- tibble::tibble(
-    metavar1=sample(letters, 10),
-    metavar2=sample(letters, 10),
+    metavar1=sample(letters[1:5], 10, replace=T),
+    metavar2=sample(letters[1:5], 10, replace=T),
                            )
   gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc=.cdesc)
   #gct = new(cmgct)
@@ -84,7 +84,20 @@ method <- params$method
 cat(paste0("Using method: ", method))
 
 if (method == "kmeans") .cluster_func <- function(..., n_clusters=1) kmeans(..., centers=n_clusters)
-if (method == "PAM") .cluster_func <- function(..., n_clusters=1) cluster::pam(..., k=n_clusters, do.swap = F)
+if (method == "pam") .cluster_func <- function(..., n_clusters=1) cluster::pam(..., k=n_clusters, do.swap = F)
+if (method == "banditpam") { # this function is not compatable with the downstream
+  .cluster_func <- function(..., n_clusters=1, loss='l2') {
+  # https://github.com/motiwari/BanditPAM/tree/main/R_package/banditpam
+  .obj <- banditpam::KMedoids$new(
+    k=n_clusters
+  )
+  .obj$fit(..., loss=loss)
+  meds <- .obj$get_medoids_final()
+  .obj
+  }
+}
+
+.res <- mat(gct) %>% .cluster_func(n_clusters=4)
 
 kclusts <-  tibble(n = 2:8) %>%
   mutate(
@@ -116,7 +129,7 @@ clusterings <-
 ```
 
 
-```{r, label=ggplot-clusterings}
+```{r, label=cluster-ggplot-clusterings}
 if ("tot.withinss" %in% colnames(clusterings)) .var <- 'tot.withinss'
 if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
 
@@ -143,7 +156,7 @@ chosen_cluster <- assignments %>% filter(n==.thecluster)
 ```
 
 
-```{r, label="cluster-heatmap-demo"}
+```{r, label=cluster-heatmap-demo}
 
 
 ComplexHeatmap::Heatmap(

@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output: html_document
 params:
   cluster_methods:
-    value: [kmeans, PAM]
+    value: [kmeans, pam]
   cluster:
     value:
       cluster_rows:
@@ -65,6 +65,7 @@ gcts <- gct_files %>%
 purrr::map(
   cmapR::parse_gctx
 )
+print(gcts)
 
 ```
 
@@ -99,9 +100,10 @@ make_new_gct <- function(gct, mat){
 
 
 ```{r, label='tackle.cdesc'}
-.gct <- gcts[[1]]
+gct <- gcts[[1]]
+#.gct <- gcts[[1]]
 #.gct@cdesc
-.gct@cdesc %>% 
+gct@cdesc %>% 
   select(recno, runno, searchno, label, everything()) %>% 
   gt::gt(
   caption="metadata"
@@ -110,15 +112,10 @@ make_new_gct <- function(gct, mat){
 ```
 
 
-```{r, label=tackle.gctlist}
-print(gcts)
-```
-
 
 
 ```{r, label=tackle.onegene, eval=F}
-.gct <- gcts[[1]]
-.sel <- .gct %>% 
+.sel <- gct %>% 
   melt_gct() %>%
   filter(id.x == "928") %>%
   mutate(id.y = factor(id.y, levels=dat@cid, ordered = T)) 
@@ -201,99 +198,15 @@ render_cluster_report <- function(method="kmeans"){
 }
 .out <- render_cluster_report(method='kmeans')
 htmltools::includeHTML(.out)
-.out <- render_cluster_report(method='PAM')
-htmltools::includeHTML(.out)
+# TODO: loop through all the methods 
+#.out <- render_cluster_report(method='pam')
+#htmltools::includeHTML(.out)
   
 #htmltools::includeHTML("cluster1.html")
 
 ```
 
-```{r eval=F}
-#[cluster](cluster.html)
-```
 
-
-```{r eval=F}
-
-clusters <- 
-  kclusts %>%
-  unnest(cols = c(tidied))
-
-assignments <- 
-  kclusts %>% 
-  unnest(cols = c(augmented))
-
-clusterings <- 
-  kclusts %>%
-  unnest(cols = c(glanced))
-```
-
-
-```{r eval=F}
-ggplot(clusterings, aes(n, tot.withinss)) +
-  geom_line() +
-  geom_point() +
-  scale_x_discrete(limits=seq(CLUSTER_RANGE) %>% as.factor() ) +
-  ggpubr::theme_pubclean()
-  #scale_x_discrete(limits=breaks_pretty())
-  #breaks_pretty() +
-
-```
-
-```{r eval=F}
-chosen_cluster <- assignments %>% filter(n==elbow_cluster_sel)
-```
-
-
-### cluster
-```{r eval=F}
-
-
-.negsel <- c('sample', 'plex', 'recno', 'label', 'id', 'runno', 'searchno', 'assay', 'replicate')
-.column_df <- .gct@cdesc %>% select(-any_of(.negsel))
-# kmeans logic
-library(ComplexHeatmap)
-
-
-.color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
-
-# fix this maybe if better
-for (col in colnames(.column_df)){
-  #print(col)
-    names(.color_list[[col]]) <-  unique(.column_df[[col]])
-}
-
-.top_annotation = columnAnnotation( df = .column_df, col = .color_list )
-
-
-.make_heatmap_row_cluster <- function(.x, ...){
-  
-  #.row_annot <- rowAnnotation(.x$.cluster)
-  .samplenames <- .gct@cid
-  
-  .h <- ComplexHeatmap::Heatmap(
-    .x %>% dplyr::select(.samplenames),
-    row_split = .x$.cluster,
-    #.forcluster %>% head(300),
-    #top_annotation = .top_annotation,
-    clustering_distance_rows = dist_no_na,
-    clustering_distance_columns =  dist_no_na,
-    column_title_side="top",
-    column_title_rot = 0,
-    column_names_gp = gpar(fontsize=9),
-    border=TRUE,
-    use_raster=T,
-    show_row_names=F,
-    ...
-)
-  .h
-}
-
-
-#.X <- chosen_cluster %>% select(.gct@cid) # grab all the numerical values from the dataframe with the chosen cluster
-chosen_cluster %>% .make_heatmap_row_cluster() %>% print
-
-```
 
 
 render PCA.Rmd
@@ -319,7 +232,14 @@ render_pca_report <- function(center=T, scale=F){
   return(.output_file_name)
   
 }
+# TODO: allow customization
+.center <- T
+.scale <- T
+.out <- render_pca_report(center=.center, scale=T)
+htmltools::includeHTML(.out)
 
+.out <- render_pca_report(center=.center, scale=F)
+htmltools::includeHTML(.out)
 ## {-}
 
 # another section

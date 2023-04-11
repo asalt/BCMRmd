@@ -12,10 +12,20 @@ params:
       true
 ---
 
-```{r setup, include=FALSE}
+
+```{r, label=pca-setup, include=F}
+library(ggplot2)
+library(cmapR)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(broom)
+library(magrittr)
+library(scales)
 library(PCAtools)
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 
 
 
@@ -27,8 +37,9 @@ if (!exists("gct")){
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
   .cdesc <- tibble::tibble(
-    metavar1=sample(letters, 10),
-    metavar2=sample(letters, 10),
+    id=.cids,
+    metavar1=sample(letters[1:5], 10, replace=T) %>% as.factor(),
+    metavar2=sample(letters[1:5], 10, replace=T) %>% as.factor(),
                            )
   gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc=.cdesc)
   #gct = new(cmgct)
@@ -41,19 +52,42 @@ if (!exists("gct")){
 
 ```{r, label=pca-begin}
 # from https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
-.forpca <- mat(gct)
-#.forpca
-#(.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
-.rownames<-apply(.gct@rdesc, 1, paste, collapse = " ")
+#.forpca <- mat(gct)
+
+# rows are genes 
+# columns are samples
+# id.x is gene
+# id.y is sample
+.center <- TRUE
+.scale <- TRUE
+.rescaled_gct_mat <- gct %>% cmapR::melt_gct() %>% group_by(id.x) %>% mutate(
+  value=scale(
+    value, # expression value after cmapR::melt_gct
+    center = !!.center,
+    scale = !!.scale
+  )
+)
+.forpca <- .rescaled_gct_mat %>% mutate(id.x=as.character(id.x)) %>% pivot_wider(values_from = value,
+                                             id_cols = id.x,
+                                             names_from = id.y
+) %>% as.data.frame 
+.rownames <- .forpca$id.x # just to be clear
 rownames(.forpca) <- .rownames
+#.forpca %<>% 
+.forpca <- .forpca[ , gct@cid ] # put back in order
+#.forpca %<>% subset(select=c(-id.x))
+#(.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
+#cmapR::
+#.forpca
+#.rownames<-apply(gct@rdesc, 1, paste, collapse = " ")
 #.gct@rdesc %>% head %>% rowwise() %>% mutate(x=str_c(everything(  )))
 #.gct@rdesc[.gct@rdesc == rownames(.forpca)]
 
 library(PCAtools)
-print('pca')
+#print('pca')
 .pcaobj <- PCAtools::pca(
   .forpca,
-  metadata = .gct@cdesc
+  metadata = gct@cdesc %>% as.data.frame # no tibbles allowed
 )
 ```
 
@@ -74,20 +108,27 @@ screeplot(.pcaobj,
 
 ```{r, label=pca-biplot, fig.width=7, fig.height=7}
 # https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
+.color_by <- "SampleType"
+#  get rom input
+if ("metavar1" %in% colnames(gct@cdesc)) .color_by <- 'metavar1'
+#if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
+
 mybiplot <- function(.pcaobj, ...) biplot(
        .pcaobj,
        showLoadings = T,
        ntopLoadings=5,
-       sizeLoadingsNames = 3,
+       sizeLoadingsNames = 2,
        hline=0, 
        vline=0,
-       colby="SampleType",
+       colby=.color_by,
+       #colby="SampleType",
        #shape='OrganSite',
        shapekey=NULL,
        ellipse=T,
        legendPosition = "right",
        ...
        )
+#biplot(.pcaobj, colby="metavar1")
 mybiplot(.pcaobj, x="PC1", y="PC2")
 mybiplot(.pcaobj, x="PC1", y="PC3")
 # biplot(.pca,
@@ -110,7 +151,7 @@ mybiplot(.pcaobj, x="PC1", y="PC3")
 mybiplot(.pcaobj, x="PC2", y="PC3")
 #.pca %>% airsplot()
 ```
-```{r, fig.width=7, fig.height=7}
+```{r, label=pca-loadings1,  fig.width=7, fig.height=7}
 myplotloadings <- function(.pcaobj, ...) plotloadings(
   .pcaobj,
   rangeRetain = .01,
@@ -119,13 +160,13 @@ myplotloadings <- function(.pcaobj, ...) plotloadings(
 .pcaobj %>% myplotloadings(labSize = 3)
 
 ```
-```{r, fig.width=7, fig.height=7}
+```{r, label=pca-myplotloadings, fig.width=7, fig.height=7}
 
 .pcaobj %>% myplotloadings(labSize = 3, absolute=T )
 ```
 
 
-```{r}
+```{r label=pca-empty}
 # not sure what this means for non-numeric
 # .p %>% eigencorplot(
 #   metavars = c(

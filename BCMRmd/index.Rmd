@@ -1,0 +1,170 @@
+---
+title: "<>"
+author: "Alex Saltzman"
+date: "`r Sys.Date()`"
+tidy: formatR
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+    includes:
+      #in_header: header.html 
+mainfont: Noto Sans
+params:
+  routines:
+    value:
+      tackle: true 
+  tackle:
+    value:
+      cluster_methods:
+          value: [kmeans, PAM]
+      cluster:
+        value:
+          cluster_rows:
+            value: true
+            description: "cluster the rows"
+          cluster_columns:
+            value: true
+          cluster_row_slices:
+            value: true
+          cluster_col_slices:
+            value: true
+          clustering_distance_rows:
+            value: euclidean
+          clustering_method_rows:
+            value: ward.d2
+          legend_include:
+            value: 
+            description: "metadata variables to include"
+          legend_exclude:
+            value:
+            description: "metadata variables to exclude"
+        pca:
+          value:
+            color:
+              value: "treat"
+            marker:
+              value: "geno"
+            annotate:
+              value: true
+            max_pc:
+              value: 4
+  test:
+    value:
+      a:
+        value: 1
+        type: int
+      b:
+        value: 2
+  logging:
+    value: 1
+    #MESSAGE: TRUE
+    #WARNING: TRUE
+    tackle: FALSE
+    denovo: FALSE
+---
+
+
+
+```{r, label=local-params}
+#print(parmas)
+
+library(yaml)
+library(fs)
+.f <- "PARAMS.yaml"
+if (fs::file_exists(.f)){
+  local_params <- yaml::yaml.load_file(.f)
+  params <- modifyList(params, local_params)
+}
+print(params)
+
+```
+
+#print(parmas)
+
+
+
+
+```{r, notebook_options}
+
+# DO_E2G <- params$DO_E2G
+# DO_tackle <- params$DO_tackle
+# 
+# MESSAGE <- params$MESSAGE
+print(params)
+WARNING<-T
+MESSAGE<-T
+# WARNING <- params$logging$WARNING
+# MESSAGE <- params$logging$MESSAGE
+
+```
+
+
+
+
+```{r settings}
+BCMBLUE <- "#002396"
+knitr::knit_hooks$set(debug = function(before, options, envir) {
+    if (!before) {
+        message(
+            paste(names(envir), as.list(envir),
+                sep = " = ", collapse = "\n"
+            )
+        )
+    }
+})
+```
+
+
+
+```{r setup, include=FALSE}
+library("glue")
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(cmapR))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(fs))
+suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(ComplexHeatmap))
+suppressPackageStartupMessages(library(circlize))
+suppressPackageStartupMessages(library(tidymodels))
+library(tidymodels)
+library(tibble)
+library(magrittr)
+
+```
+
+
+# MASIC
+```{r, message=MESSAGE, warning=WARNING, results='hide', eval=F}
+rmarkdown::render('MASIC.Rmd', output_file = 'MASIC.html')
+#knitr::knit_child('MASIC.Rmd')
+```
+[MASIC](MASIC.html)
+
+
+# E2G
+```{r, label=E2G, message=MESSAGE, warning=WARNING, results='hide', eval=F}
+if (DO_E2G == TRUE) rmarkdown::render('E2G.Rmd', output_file = 'E2G.html')
+#knitr::knit_child('MASIC.Rmd')
+```
+[E2G](E2G.html)
+
+
+# tackle
+```{r, label=tackle, message=MESSAGE, warning=WARNING, results='hide', eval=params$routines$tackle}
+.params<-params$tackle
+rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=.params)
+#rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
+```
+[tackle](tackle.html)
+
+
+# denovo
+```{r, label=denovo, message=MESSAGE, warning=WARNING, results='hide', eval=F}
+rmarkdown::render('denovo.Rmd', output_file = 'denovo.html')
+```
+[denvo](denovo.html)
+

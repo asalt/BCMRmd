@@ -1,0 +1,217 @@
+---
+title: "cluster"
+author: "AlexSaltman"
+date: "`r Sys.Date()`"
+output: html_document
+params:
+  method:
+    value: PAM # kmeans, pam
+    options: [kmeans, PAM]
+  cluster_rows:
+    value: true
+  cluster_columns:
+    value: true
+  cluster_row_slices:
+    value: true
+  cluster_col_slices:
+    value: true
+  clustering_distance_rows:
+    value: euclidean
+  clustering_method_rows:
+    value: ward.d2
+  legend_include:
+    value: 
+  legend_exclude:
+    value:
+
+end: 1
+
+---
+
+
+```{r, label=cluster-load, include=F}
+library(ggplot2)
+library(cmapR)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(broom)
+library(magrittr)
+library(scales)
+```
+
+```{r, label=cluster-environment, include=F}
+method <- params$method
+#check if .gct obj is in environment
+if (!exists("gct")){
+  .mat <- matrix( runif(1000), nrow=100, ncol=10 )
+  .rids <- seq(1, dim(.mat)[1]) %>% as.character()
+  .cids <- seq(1, dim(.mat)[2]) %>% as.character()
+  .cdesc <- tibble::tibble(
+    metavar1=sample(letters, 10),
+    metavar2=sample(letters, 10),
+                           )
+  gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc=.cdesc)
+  #gct = new(cmgct)
+} else {
+  # If 'gct' exists, just use the existing one
+  cat("Using existing 'gct'.\n")
+}
+```
+
+```{r, label=cluster-funcs}
+
+dist_no_na <- function(mat) {
+  mat[is.na(mat)] <- min(mat, na.rm = TRUE)
+  edist <- dist(mat)
+  return(edist)
+}
+```
+
+
+
+## docluster
+
+```{r, label="cluster-docluster"}
+# from https://www.tidymodels.org/learn/statistics/k-means/
+
+#.tocluster <- mat(dat) 
+.tocluster <- mat(gct) %>% head(400)
+#.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
+
+method <- params$method
+#method <- "kmeans"
+cat(paste0("Using method: ", method))
+
+if (method == "kmeans") .cluster_func <- function(..., n_clusters=1) kmeans(..., centers=n_clusters)
+if (method == "PAM") .cluster_func <- function(..., n_clusters=1) cluster::pam(..., k=n_clusters, do.swap = F)
+
+kclusts <-  tibble(n = 2:8) %>%
+  mutate(
+    #kclust = map(n, ~.cluster_func(n=.x)),
+    kclust = map(n, ~.cluster_func(.tocluster,  n_clusters=.x) )
+  ) 
+kclusts %<>% 
+  mutate(
+    tidied = map(kclust, broom::tidy),
+    glanced = map(kclust, broom::glance),
+    augmented = map(kclust, augment, .tocluster)
+  
+)
+```
+
+```{r, label= cluster-domorestuff}
+
+clusters <- 
+  kclusts %>%
+  tidyr::unnest(cols = c(tidied))
+
+assignments <- 
+  kclusts %>% 
+  tidyr::unnest(cols = c(augmented))
+
+clusterings <- 
+  kclusts %>%
+  tidyr::unnest(cols = c(glanced))
+```
+
+
+```{r, label=ggplot-clusterings}
+if ("tot.withinss" %in% colnames(clusterings)) .var <- 'tot.withinss'
+if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
+
+#ggplot(clusterings, aes(n, tot.withinss)) +
+#ggplot(clusterings, aes(n, quasi({{.var}}) )) +
+#ggplot(clusterings, aes(n, avg.silhouette.width )) +
+ggplot(clusterings, aes(n, .data[[.var]] )) +
+  geom_line() +
+  geom_point() +
+  scale_x_discrete(limits=seq(1, 10,1) %>% as.factor() )
+  #scale_x_discrete(limits=breaks_pretty())
+  #ggpubr::theme_pubclean()
+  #breaks_pretty() +
+```
+
+```{r, label=cluster-metrics-plot}
+library(PCAtools)
+
+if ("tot.withinss" %in% colnames(clusterings)) .var <- 'tot.withinss'
+if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
+.elbow_cluster_sel <- PCAtools::findElbowPoint(clusterings[.var]) # this returns position
+.thecluster <- clusterings$n[[.elbow_cluster_sel]]
+chosen_cluster <- assignments %>% filter(n==.thecluster)
+```
+
+
+```{r, label="cluster-heatmap-demo"}
+
+
+ComplexHeatmap::Heatmap(
+  mat(gct) %>% head(30)
+)
+
+```
+
+### render cluster plot
+```{r label=cluster-heatmap-plot-full}
+
+.negsel <- c('sample', 'plex', 'recno', 'label', 'id', 'runno', 'searchno', 'assay', 'replicate')
+.column_df <- gct@cdesc %>% select(-any_of(.negsel))
+# kmeans logic
+library(ComplexHeatmap)
+
+recycle_colors <- function(type="qual", n=8) {
+  #original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
+  original_palette <- brewer_pal(type="qual", palette=2)(min(n, 8))
+  recycled_palette <- rep_len(original_palette, length.out = n)
+  return(recycled_palette)
+}
+#
+#.color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
+
+
+.color_list <- .column_df %>% as.list %>% map( ~ recycle_colors(n=length(unique(.))) )
+# fix this maybe if better
+for (col in colnames(.column_df)){
+  #print(col)
+    #names(.color_list[[col]]) <-  unique(.column_df[[col]])
+    names(.color_list[[col]]) <-  unique(.column_df[[col]])
+}
+
+
+.top_annotation <- columnAnnotation( df = .column_df %>% as.data.frame, 
+                                    col=.color_list
+                                    #col = anno_block(gp = gpar(fill = .color_list$metavar1))
+)
+                                    
+                                    #col = .color_list )
+
+
+
+.make_heatmap_row_cluster <- function(.x, ...){
+  
+  #.row_annot <- rowAnnotation(.x$.cluster)
+  .samplenames <- gct@cid
+  
+  .h <- ComplexHeatmap::Heatmap(
+    .x %>% dplyr::select(.samplenames),
+    row_split = .x$.cluster,
+    #.forcluster %>% head(300),
+    #top_annotation = .top_annotation,
+    clustering_distance_rows = dist_no_na,
+    clustering_distance_columns =  dist_no_na,
+    column_title_side="top",
+    column_title_rot = 0,
+    column_names_gp = gpar(fontsize=9),
+    border=TRUE,
+    use_raster=T,
+    show_row_names=F,
+    ...
+)
+  .h
+}
+
+
+#.X <- chosen_cluster %>% select(.gct@cid) # grab all the numerical values from the dataframe with the chosen cluster
+chosen_cluster %>% .make_heatmap_row_cluster() %>% print
+```

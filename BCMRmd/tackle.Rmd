@@ -4,11 +4,29 @@ author: "AlexSaltman"
 date: "`r Sys.Date()`"
 output: html_document
 params:
-  color: "PDXModel"
-  marker: "plex"
-  CLUSTER_RANGE_LOWER: 3 
-  CLUSTER_RANGE_HIGHER: 13
-#  ROOTPATH: "`r fs::path_wd('.')`"
+  cluster_methods:
+    value: [kmeans, PAM]
+  cluster:
+    value:
+      cluster_rows:
+        value: true
+        description: "cluster the rows"
+      cluster_columns:
+        value: true
+      cluster_row_slices:
+        value: true
+      cluster_col_slices:
+        value: true
+      clustering_distance_rows:
+        value: euclidean
+      clustering_method_rows:
+        value: ward.d2
+      legend_include:
+        value: 
+        description: "metadata variables to include"
+      legend_exclude:
+        value:
+        description: "metadata variables to exclude"
 ---
 
 ```{r tackle.setup, include=FALSE}
@@ -23,7 +41,13 @@ library(tibble)
 ```
 
 
+# logging
+```{r label=tackle-logging}
+MESSAGE<-T
+WARNING<-T
+```
 # load
+
 
 ```{r label=tackle.load}
 print(params$color)
@@ -45,7 +69,7 @@ purrr::map(
 ```
 
 # funcs
-```{r}
+```{r, label=tackle-funcs}
 
 myzscore <- function(value, minval = NA, remask = TRUE) {
   mask <- is.na(value)
@@ -115,39 +139,25 @@ print(gcts)
 gcts %>% map(
   ~cmapR::mat(.) %>% dim
 )
+gct <- gcts[[1]]
+# all below analysis is written to analyze 1 gct object
 ```
 
 ## cluster
 ### heatmap
-```{r}
-
-
-```
-
-
-```{r}
-.gct <- gcts[[1]]
-# all below analysis is written to analyze 1 gct object
-```
- all below analysis is written to analyze 1 gct object
-
-
-```{r, label="tackle.cluster"}
-
-```
 
 ### kmeans
 
 here z score and any other xformations take place
-```{r}
+```{r eval=F}
 # from https://www.tidymodels.org/learn/statistics/k-means/
-CLUSTER_RANGE <- seq(params$CLUSTER_RANGE_LOWER, params$CLUSTER_RANGE_HIGHER, 1)
-#CLUSTER_RANGE=seq(4,14)
+#CLUSTER_RANGE <- seq(params$CLUSTER_RANGE_LOWER, params$CLUSTER_RANGE_HIGHER, 1)
+CLUSTER_RANGE=seq(3,7)
 
 
 # if z score is true
 # what's easier way to do this?
-.forcluster <- mat(.gct)
+.forcluster <- mat(.gct) %>% head(500)
 .forcluster %<>% apply(MARGIN=1, FUN=myzscore) %>% t() %>% as.matrix()
 colnames(.forcluster) <- colnames(mat(.gct))
 .gct_zscored <- make_new_gct(.gct, .forcluster)
@@ -169,7 +179,41 @@ kclusts %<>%
 )
 ```
 
-```{r}
+render cluster.Rmd
+```{r, label=tackle-cluster, message=T, warning=T, results='show', eval=T}
+
+.params <- params$cluster
+
+#.params$method <- "kmeans"
+
+render_cluster_report <- function(method="kmeans"){
+  .output_file_name <- paste0("cluster_", "method_", method, ".html")
+  rmarkdown::render("cluster.Rmd", 
+              output_file=.output_file_name,
+              params=list(method=method)
+              #params=.params,
+              #envir = globalenv(),
+              #envir = new_env
+              #documentation=1,
+              )
+  return(.output_file_name)
+  
+}
+.out <- render_cluster_report(method='kmeans')
+htmltools::includeHTML(.out)
+.out <- render_cluster_report(method='PAM')
+htmltools::includeHTML(.out)
+  
+#htmltools::includeHTML("cluster1.html")
+
+```
+
+```{r eval=F}
+#[cluster](cluster.html)
+```
+
+
+```{r eval=F}
 
 clusters <- 
   kclusts %>%
@@ -185,7 +229,7 @@ clusterings <-
 ```
 
 
-```{r}
+```{r eval=F}
 ggplot(clusterings, aes(n, tot.withinss)) +
   geom_line() +
   geom_point() +
@@ -196,19 +240,13 @@ ggplot(clusterings, aes(n, tot.withinss)) +
 
 ```
 
-```{r}
-elbow_cluster_sel <- findElbowPoint(clusterings$tot.withinss)
-#.elbow <- findElbowPoint(.pcaobj$variance)
-```
-
-
-```{r}
+```{r eval=F}
 chosen_cluster <- assignments %>% filter(n==elbow_cluster_sel)
 ```
 
 
 ### cluster
-```{r}
+```{r eval=F}
 
 
 .negsel <- c('sample', 'plex', 'recno', 'label', 'id', 'runno', 'searchno', 'assay', 'replicate')
@@ -257,104 +295,30 @@ chosen_cluster %>% .make_heatmap_row_cluster() %>% print
 
 ```
 
-## pca
-```{r, label="tackle.PCA"}
-# from https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
-.forpca <- mat(.gct)
-#.forpca
-#(.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
-.rownames<-apply(.gct@rdesc, 1, paste, collapse = " ")
-rownames(.forpca) <- .rownames
-#.gct@rdesc %>% head %>% rowwise() %>% mutate(x=str_c(everything(  )))
-#.gct@rdesc[.gct@rdesc == rownames(.forpca)]
 
-library(PCAtools)
-print('pca')
-.pcaobj <- PCAtools::pca(
-  .forpca,
-  metadata = .gct@cdesc
-)
-```
+render PCA.Rmd
+```{r, label=tackle-pca, message=T, warning=T, results='show', eval=T}
 
-```{r}
+.params <- params$cluster
 
-.elbow <- findElbowPoint(.pcaobj$variance)
-screeplot(.pcaobj,
-          components = 1:10,
-          axisLabSize = 18,
-          titleLabSize = 22,
-          vline = .elbow
-  ) +
-          geom_label(aes(x = .elbow + 1, y = 50,
-                  label = 'Elbow method', vjust = -1, size = 8)
-          )
+#.params$method <- "kmeans"
 
-```
-
-```{r, label=pca-biplot, fig.width=6, fig.height=6}
-# https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
-mybiplot <- function(.pcaobj, ...) biplot(
-       .pcaobj,
-       showLoadings = T,
-       ntopLoadings=5,
-       sizeLoadingsNames = 3,
-       hline=0, 
-       vline=0,
-       colby="SampleType",
-       #shape='OrganSite',
-       shapekey=NULL,
-       ellipse=T,
-       legendPosition = "right",
-       ...
-       )
-mybiplot(.pcaobj, x="PC1", y="PC2")
-mybiplot(.pcaobj, x="PC1", y="PC3")
-# biplot(.pca,
-#        x="PC1",
-#        y="PC2",
-#        showLoadings = T,
-#        ntopLoadings=5,
-#        sizeLoadingsNames = 3,
-#        colby="SampleType",
-#        #shape='OrganSite',
-#        shapekey=NULL,
-#        ellipse=T,
-#        legendPosition = "top"
-#        )
-
-```
-
-```{r, label=pca-biplot2_3, fig.width=6, fig.height=6}
-
-mybiplot(.pcaobj, x="PC2", y="PC3")
-#.pca %>% airsplot()
-```
-```{r, fig.width=7, fig.height=7}
-myplotloadings <- function(.pcaobj, ...) plotloadings(
-  .pcaobj,
-  rangeRetain = .01,
-  ...
-)
-.pcaobj %>% myplotloadings(labSize = 3)
-
-```
-```{r, fig.width=7, fig.height=7}
-
-.pcaobj %>% myplotloadings(labSize = 3, absolute=T )
-```
-
-
-```{r}
-# not sure what this means for non-numeric
-# .p %>% eigencorplot(
-#   metavars = c(
-#     "SampleType",
-#     "OrganSite",
-#     "PDXModel",
-#     #"plex"
-#   )
-# )
-```
+render_pca_report <- function(center=T, scale=F){
+  .output_file_name <- paste0("PCA", "center_", center, "scale_", scale, ".html")
+  rmarkdown::render("PCA.Rmd", 
+              output_file=.output_file_name,
+              params=list(
+                center=center,
+                scale=scale
+              )
+              #params=.params,
+              #envir = globalenv(),
+              #envir = new_env
+              #documentation=1,
+              )
+  return(.output_file_name)
+  
+}
 
 ## {-}
 

@@ -17,6 +17,18 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 library(vroom)
+library(dplyr)
+
+library(fs)
+library(knitr)
+library(tibble)
+library(stringr)
+library(magrittr)
+library(purrr)
+library(pillar)
+library(readr)
+library(purrr)
+
 ROOTPATH<- params$ROOTPATH
 
 ( ROOTPATH )
@@ -37,34 +49,201 @@ calc_stat_summary <- function(.x, .var) {
             .groups = "keep"
         )
 }
+
 ```
+  
+  
+```{r}
+
+NUM_ROWS <- 300
+
+TEST_DATA_COLUMNS <- list()
+
+COLS_SICstats <- c(
+  "Dataset",
+  "ParentIonIndex",
+  "MZ",
+  "SurveyScanNumber",
+  "FragScanNumber",
+  "OptimalPeakApexScanNumber",
+  "PeakApexOverrideParentIonIndex",
+  "CustomSICPeak",
+  "PeakScanStart",
+  "PeakScanEnd",
+  "PeakScanMaxIntensity",
+  "PeakMaxIntensity",
+  "PeakSignalToNoiseRatio",
+  "FWHMInScans",
+  "PeakArea",
+  "ParentIonIntensity",
+  "PeakBaselineNoiseLevel",
+  "PeakBaselineNoiseStDev",
+  "PeakBaselinePointsUsed",
+  "StatMomentsArea",
+  "CenterOfMassScan",
+  "PeakStDev",
+  "PeakSkew",
+  "PeakKSStat",
+  "StatMomentsDataCountUsed",
+  "InterferenceScore"
+)
+TEST_DATA_COLUMNS %<>% append(list(a_COLS_SICstats = COLS_SICstats))
+TEST_DATA_COLUMNS %<>% append(list(b_COLS_SICstats = COLS_SICstats))
+
+COLS_REPORTER_IONS <- c(
+  "Dataset",
+  "ScanNumber",
+  "Collision",
+  "Mode",
+  "ParentIonMZ",
+  "BasePeakIntensity",
+  "BasePeakMZ",
+  "ReporterIonIntensityMax",
+  "Ion_126.128",
+  "Ion_127.125",
+  "Ion_127.131",
+  "Ion_128.128",
+  "Ion_128.134",
+  "Ion_129.131",
+  "Ion_129.138",
+  "Ion_130.135",
+  "Ion_130.141",
+  "Ion_131.138",
+  "Ion_131.144",
+  "Weighted Avg Pct Intensity Correction"
+)
+TEST_DATA_COLUMNS %<>% append(list(COLS_REPORTER_IONS1 = COLS_REPORTER_IONS))
+TEST_DATA_COLUMNS %<>% append(list(COLS_REPORTER_IONS2 = COLS_REPORTER_IONS))
+
+make_test_data <- function(column_names, num_rows=300) {
+  # map_dfc because we want to return a dataframe based on the column names we are feeding in
+  # runif <- random draw uniform distribution
+  .uid <- format(Sys.time(), "%Y%m%d%H%M%OS6") 
+
+  map_dfc(
+    column_names,
+    # ~  = inline expression
+    # !! = eval expression
+    # .x = a column name
+    # := = assignment
+    ~ tibble(!!.x := runif(num_rows))
+  ) %>%  mutate(id=.uid) %>%  # this is for SICstats only now.
+    mutate(SurveyScanNumber = 1:num_rows,
+           ParentIonIndex = 1:num_rows,
+           MZ = (rbeta(num_rows, 3, 6) * 1000 ) + 200,
+           ParentIonIntensity = rexp(num_rows ) * 10000 ,
+           )
+}
+
+( make_test_data(list("a", "b", "c"), num_rows = 10) ) # test
+
+
+.test <- list(
+  list('a', 'b', 'c'),
+  list('a', 'b', 'c')
+) %>% map(~make_test_data(.,num_rows = 10))
+
+.test <- list(
+  
+  list('a', 'b', 'c'),
+  list('a', 'b', 'c')
+) %>% map_dfr(~make_test_data(.,num_rows = 2))
+( .test )
+
+
+# not working
+#.test <- replicate(
+#  list('a', 'b', 'c'), n=3,
+#) #%>% map_dfr(~make_test_data(.,num_rows = 2))
+#( .test )
+
+.test %>% count(id)
+( make_test_data(list("a", "b", "c"), num_rows = 10) ) # test
+
+```
+# make data
+  
 
 
 ```{r label=masic.load}
-MASIC_FILES <- fs::dir_ls(
+SIC_MASIC_FILES <- fs::dir_ls(
   path = ROOTPATH,
   recurse = TRUE,
   regexp = ".SICstats.txt"
  )
 
+ReporterIon_MASIC_FILES <- fs::dir_ls(
+  path = ROOTPATH,
+  recurse = TRUE,
+  regexp = ".ReporterIon.txt"
+ )
 
-( MASIC_FILES )
 
+( SIC_MASIC_FILES )
 
-df <- MASIC_FILES %>%  map_df(~ vroom(.x, n_max = Inf) %>% mutate(id = fs::path_file(.x)))
+df <- SIC_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = Inf) %>% mutate(id = fs::path_file(.x)))
+# one big dataframe with file id as one column
 
+if (df %>% length() == 0)
+  {
+    #( make_test_data(list("a", "b", "c"), num_rows = 10) ) # test
+    # make fake data
+    .df <- list(
+      COLS_SICstats,
+      COLS_SICstats,
+      COLS_SICstats
+             ) %>% 
+      map_df(
+        ~ make_test_data(., num_rows = 300)
+      )
+    
+#TEST_DATA_COLUMNS %<>% append(list(a_COLS_SICstats = COLS_SICstats))
+#TEST_DATA_COLUMNS %<>% append(list(b_COLS_SICstats = COLS_SICstats))
+    
+    
+  }
+df <- .df
 
 ```
 
 
 ```{r}
-library(dplyr)
 df %>% 
   group_by(id) %>% 
     calc_stat_summary(
       ParentIonIntensity
       )
 
+
+```
+
+```{r, label='masic-sparkline'}
+library(sparkline)
+.sparkline <- df %>% group_by(id) %>% arrange(ParentIonIndex) %>%  summarise(ParentIonIntensity=spk_chr(ParentIonIntensity, width=600, height=100))
+#.sparkline <- dfp %>% group_by(SpectrumFile) %>% arrange(ParentIonIndex) %>%   summarise(value=spk_chr(ParentIonIntensity, options=list(spotColor=FALSE)))
+# kable(test, escape=F)
+.sparkline %>% formattable::format_table(
+  align = c("l", "r"), 
+  # SpectrumFile = formattable::style(align='l'),
+  # value = formattable::formatter(
+  #  style = formattable::style(
+  #     display = "inline-block",  
+  #     `padding-left` = '50px',
+  #     `padding-right` = '10px'
+  #    )
+  # ) 
+)
+```
+
+
+```{r, MASIC-mz}
+
+ggpubr::ggline(df,
+                  x="ParentIonIndex",
+                  y="MZ",
+               facet.by = 'id'
+               #group="id"
+                  )
 
 ```
 

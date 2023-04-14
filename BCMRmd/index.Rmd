@@ -18,7 +18,7 @@ params:
   tackle:
     value:
       cluster_methods:
-          value: [kmeans, PAM]
+          value: [kmeans, pam]
       cluster:
         value:
           cluster_rows:

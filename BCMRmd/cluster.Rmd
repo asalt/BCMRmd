@@ -2,11 +2,18 @@
 title: "cluster"
 author: "AlexSaltman"
 date: "`r Sys.Date()`"
-output: html_document
+tidy: formatR
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+    includes:
+      #in_header: header.html 
 params:
   method:
     value: pam # kmeans, pam
-    options: [kmeans, pam, banditpam]
+    options: [kmeans, pam, banditpam] # banditpam not yet
   cluster_rows:
     value: true
   cluster_columns:
@@ -23,6 +30,8 @@ params:
     value: 
   legend_exclude:
     value:
+  cluster_test_range:
+    value: [2, 12]
 
 end: 1
 
@@ -38,13 +47,15 @@ library(purrr)
 library(broom)
 library(magrittr)
 library(scales)
+source("funcs.R")
 ```
 
 ```{r, label=cluster-environment, include=F}
 method <- params$method
 #check if .gct obj is in environment
 if (!exists("gct")){
-  .mat <- matrix( runif(1000), nrow=100, ncol=10 )
+  set.seed(369)
+  .mat <- matrix( runif(10000), nrow=1000, ncol=10 )
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
   .cdesc <- tibble::tibble(
@@ -70,14 +81,40 @@ dist_no_na <- function(mat) {
 
 
 
+
+here z score and any other xformations take place
+```{r eval=F}
+# from https://www.tidymodels.org/learn/statistics/k-means/
+#CLUSTER_RANGE <- seq(params$CLUSTER_RANGE_LOWER, params$CLUSTER_RANGE_HIGHER, 1)
+CLUSTER_RANGE=seq(3,7)
+
+
+#colnames(.forcluster) <- .gct@cid
+#.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
+```
+
+
 ## docluster
 
 ```{r, label="cluster-docluster"}
 # from https://www.tidymodels.org/learn/statistics/k-means/
 
 #.tocluster <- mat(dat) 
-.tocluster <- mat(gct) %>% head(400)
+# hack to make the data smaller
+# remove this later
+#mat(gct) %<>% head(400)
+.tocluster <- mat(gct)
 #.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
+# transformations
+# if z score is true
+# what's easier way to do this?
+# we know the way
+# melt
+.tocluster %<>% apply(MARGIN=1, FUN=myzscore) %>% t() %>% as.matrix()
+colnames(.tocluster) <- colnames(mat(gct))
+.gct <- make_new_gct(gct, .tocluster) # our local gct file after xformations
+#
+# here is where we can assign our transformed .gct file
 
 method <- params$method
 #method <- "kmeans"
@@ -97,9 +134,12 @@ if (method == "banditpam") { # this function is not compatable with the downstre
   }
 }
 
-.res <- mat(gct) %>% .cluster_func(n_clusters=4)
+#.res <- mat(.gct) %>% .cluster_func(n_clusters=4)
+#.test_range <- 2:8
+.test_range <- params$cluster_test_range[1] : params$cluster_test_range[2]
+(.test_range)
 
-kclusts <-  tibble(n = 2:8) %>%
+kclusts <-  tibble(n = .test_range) %>%
   mutate(
     #kclust = map(n, ~.cluster_func(n=.x)),
     kclust = map(n, ~.cluster_func(.tocluster,  n_clusters=.x) )
@@ -136,10 +176,15 @@ if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.w
 #ggplot(clusterings, aes(n, tot.withinss)) +
 #ggplot(clusterings, aes(n, quasi({{.var}}) )) +
 #ggplot(clusterings, aes(n, avg.silhouette.width )) +
+
+#.test_range <- 2:8
+.lower <- params$cluster_test_range[1]
+.upper <- params$cluster_test_range[2]
+
 ggplot(clusterings, aes(n, .data[[.var]] )) +
   geom_line() +
   geom_point() +
-  scale_x_discrete(limits=seq(1, 10,1) %>% as.factor() )
+  scale_x_discrete(limits=seq(.lower, .upper, 1) %>% as.factor() )
   #scale_x_discrete(limits=breaks_pretty())
   #ggpubr::theme_pubclean()
   #breaks_pretty() +
@@ -150,8 +195,17 @@ library(PCAtools)
 
 if ("tot.withinss" %in% colnames(clusterings)) .var <- 'tot.withinss'
 if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
-.elbow_cluster_sel <- PCAtools::findElbowPoint(clusterings[.var]) # this returns position
-.thecluster <- clusterings$n[[.elbow_cluster_sel]]
+.elbow_cluster_ix <- PCAtools::findElbowPoint(clusterings[.var]) # this returns position
+.elbow_cluster_sel <- clusterings[.elbow_cluster_ix, 'n' ]
+
+(.elbow_cluster_sel)
+if (.elbow_cluster_sel == 2) {
+  print('two clusters not very interesting')
+  .elbow_cluster_sel <- 3
+  
+}
+#.thecluster <- clusterings$n[[.elbow_cluster_sel]]
+.thecluster <- .elbow_cluster_sel
 chosen_cluster <- assignments %>% filter(n==.thecluster)
 ```
 
@@ -160,7 +214,7 @@ chosen_cluster <- assignments %>% filter(n==.thecluster)
 
 
 ComplexHeatmap::Heatmap(
-  mat(gct) %>% head(30)
+  mat(.gct) %>% head(30)
 )
 
 ```
@@ -169,7 +223,7 @@ ComplexHeatmap::Heatmap(
 ```{r label=cluster-heatmap-plot-full}
 
 .negsel <- c('sample', 'plex', 'recno', 'label', 'id', 'runno', 'searchno', 'assay', 'replicate')
-.column_df <- gct@cdesc %>% select(-any_of(.negsel))
+.column_df <- .gct@cdesc %>% select(-any_of(.negsel))
 # kmeans logic
 library(ComplexHeatmap)
 
@@ -204,10 +258,10 @@ for (col in colnames(.column_df)){
 .make_heatmap_row_cluster <- function(.x, ...){
   
   #.row_annot <- rowAnnotation(.x$.cluster)
-  .samplenames <- gct@cid
+  .samplenames <- .gct@cid
   
   .h <- ComplexHeatmap::Heatmap(
-    .x %>% dplyr::select(.samplenames),
+    .x %>% dplyr::select(all_of(.samplenames)),
     row_split = .x$.cluster,
     #.forcluster %>% head(300),
     #top_annotation = .top_annotation,

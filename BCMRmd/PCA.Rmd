@@ -2,7 +2,13 @@
 title: "PCA"
 author: "AlexSaltman"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+    includes:
+      #in_header: header.html 
 params:
   center:
     value:
@@ -33,6 +39,7 @@ knitr::opts_chunk$set(echo = TRUE)
 method <- params$method
 #check if .gct obj is in environment
 if (!exists("gct")){
+  set.seed(369)
   .mat <- matrix( runif(1000), nrow=100, ncol=10 )
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
@@ -58,8 +65,12 @@ if (!exists("gct")){
 # columns are samples
 # id.x is gene
 # id.y is sample
-.center <- TRUE
-.scale <- TRUE
+# .center <- TRUE
+# .scale <- TRUE
+.center <- params$center
+.scale <- params$scale
+(.center)
+(.scale)
 .rescaled_gct_mat <- gct %>% cmapR::melt_gct() %>% group_by(id.x) %>% mutate(
   value=scale(
     value, # expression value after cmapR::melt_gct
@@ -160,6 +171,7 @@ myplotloadings <- function(.pcaobj, ...) plotloadings(
 .pcaobj %>% myplotloadings(labSize = 3)
 
 ```
+
 ```{r, label=pca-myplotloadings, fig.width=7, fig.height=7}
 
 .pcaobj %>% myplotloadings(labSize = 3, absolute=T )

@@ -99,6 +99,9 @@ make_new_gct <- function(gct, mat){
 ```
 
 
+# results {.tabset}
+
+## metadata
 ```{r, label='tackle.cdesc'}
 gct <- gcts[[1]]
 #.gct <- gcts[[1]]
@@ -114,22 +117,7 @@ gct@cdesc %>%
 
 
 
-```{r, label=tackle.onegene, eval=F}
-.sel <- gct %>% 
-  melt_gct() %>%
-  filter(id.x == "928") %>%
-  mutate(id.y = factor(id.y, levels=dat@cid, ordered = T)) 
- 
-.gene <- .sel$rdesc %>% unique
-.sel %>% 
-  ggpubr::ggbarplot(x='id.y', y="value",
-                  title = .gene,
-                  color = params$color) %>%
-  ggpar(x.text.angle = 90)
-```
 
-
-# results {.tabset}
 
 ## metrics
 ```{r, label="tackle.metrics"}
@@ -141,40 +129,7 @@ gct <- gcts[[1]]
 ```
 
 ## cluster
-### heatmap
 
-### kmeans
-
-here z score and any other xformations take place
-```{r eval=F}
-# from https://www.tidymodels.org/learn/statistics/k-means/
-#CLUSTER_RANGE <- seq(params$CLUSTER_RANGE_LOWER, params$CLUSTER_RANGE_HIGHER, 1)
-CLUSTER_RANGE=seq(3,7)
-
-
-# if z score is true
-# what's easier way to do this?
-.forcluster <- mat(.gct) %>% head(500)
-.forcluster %<>% apply(MARGIN=1, FUN=myzscore) %>% t() %>% as.matrix()
-colnames(.forcluster) <- colnames(mat(.gct))
-.gct_zscored <- make_new_gct(.gct, .forcluster)
-#colnames(.forcluster) <- .gct@cid
-#.cluster_func <- function(n, ...) kmeans(.tocluster, n, ...)
-
-kclusts <-  tibble(n=seq(CLUSTER_RANGE)) %>%
-  mutate(
-    #kclust = map(n, ~.cluster_func(n=.x)),
-    kclust = map(n, ~kmeans(mat(.gct_zscored), centers=.x))
-  ) 
-
-kclusts %<>% 
-  mutate(
-    tidied = map(kclust, tidy),
-    glanced = map(kclust, glance),
-    augmented = map(kclust, augment, .forcluster)
-  
-)
-```
 
 render cluster.Rmd
 ```{r, label=tackle-cluster, message=T, warning=T, results='show', eval=T}
@@ -243,4 +198,23 @@ htmltools::includeHTML(.out)
 ## {-}
 
 # another section
+
+
+```
+
+## YFG
+
+```{r, label=tackle-onegene, eval=T}
+.sel <- gct %>% 
+  melt_gct() %>%
+  filter(id.x == "928") %>%
+  mutate(id.y = factor(id.y, levels=gct@cid, ordered = T)) 
+ 
+.gene <- .sel$rdesc %>% unique
+.sel %>% 
+  ggpubr::ggbarplot(x='id.y', y="value",
+                  title = .gene,
+                  color = params$color) %>%
+  ggpar(x.text.angle = 90)
+```
 

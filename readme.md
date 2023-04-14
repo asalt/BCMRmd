@@ -42,10 +42,10 @@ Metaparam3 values:
 
 
 hierarchy:
-#            index.Rmd
-#          /        \
-#      MASIC.Rmd    tackle.Rmd
-#                  /     |    \
-#          metrics.Rmd  pca.Rmd  cluster.Rmd
-#
-#         
+%            index.Rmd
+%          /        \
+%      MASIC.Rmd    tackle.Rmd
+%                  /     |    \
+%          metrics.Rmd  pca.Rmd  cluster.Rmd
+%
+%         

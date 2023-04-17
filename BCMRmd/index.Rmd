@@ -12,13 +12,22 @@ output:
       #in_header: header.html 
 mainfont: Noto Sans
 params:
+  paramfile:
+    value:
+  ROOTPATH:
+    value: "`normalizePath(dirname('.'))`"
   routines:
     value:
       tackle: true 
+      E2G: false
+  E2G:
+    value:
+      ANOTHER:
+        value: 1
   tackle:
     value:
       cluster_methods:
-          value: [kmeans, pam]
+          value: [kmeans]
       cluster:
         value:
           cluster_rows:
@@ -69,6 +78,8 @@ params:
 
 ```{r, label=local-params}
 #print(parmas)
+knitr::opts_chunk$set(root.dir = normalizePath("."))
+
 
 library(yaml)
 library(fs)
@@ -81,7 +92,6 @@ print(params)
 
 ```
 
-#print(parmas)
 
 
 
@@ -146,20 +156,49 @@ rmarkdown::render('MASIC.Rmd', output_file = 'MASIC.html')
 
 
 # E2G
-```{r, label=E2G, message=MESSAGE, warning=WARNING, results='hide', eval=F}
-if (DO_E2G == TRUE) rmarkdown::render('E2G.Rmd', output_file = 'E2G.html')
-#knitr::knit_child('MASIC.Rmd')
+```{r, label=E2G, message=MESSAGE, warning=WARNING, results='show', eval=params$routines$E2G}
+print(params$E2G)
+print(params$E2G$value$ANOTHER)
+.new_params <- params$E2G
+ .out  <- rmarkdown::render('E2G.Rmd', output_file = 'E2G.html', 
+                            params=.new_params,
+                            envir = new.env()
+                            )
+# #knitr::knit_child('MASIC.Rmd')
+# htmltools::includeHTML(.out)
 ```
-[E2G](E2G.html)
 
 
 # tackle
 ```{r, label=tackle, message=MESSAGE, warning=WARNING, results='hide', eval=params$routines$tackle}
-.params<-params$tackle
-rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=.params)
-#rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
+#.params<-params$tackle
+cat(as.character(params$tackle))
+.out <- rmarkdown::render('tackle.Rmd', output_file = 'tackle.html',
+                          params=params$tackle,
+                          envir = new.env()
+                          )#, params=.params)
+
+print(.out)
+.dirname <- normalizePath(dirname('.out')) 
+(.dirname)
 ```
-[tackle](tackle.html)
+```{r}
+#rint(normalizePath(dirname('.')) )
+#rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
+# render_cluster_report <- function(){
+#   .output_file_name <- paste0("cluster_", "method_", method, ".html")
+#   rmarkdown::render("cluster.Rmd", 
+#               output_file=.output_file_name,
+#               params=list()
+#               #params=.params,
+#               #envir = globalenv(),
+#               #envir = new_env
+#               #documentation=1,
+#               )
+#   return(.output_file_name)
+.out %>% htmltools::includeHTML()
+#fs::path_join(c("../", .out)) %>%  htmltools::includeHTML() 
+```
 
 
 # denovo

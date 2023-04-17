@@ -3,7 +3,12 @@ title: "tackle"
 author: "AlexSaltman"
 date: "`r Sys.Date()`"
 output: html_document
+
 params:
+  ROOTPATH: 
+    value: "`normalizePath(dirname('.'))`"
+  paramfile:
+    value: ""
   cluster_methods:
     value: [kmeans, pam]
   cluster:
@@ -27,6 +32,9 @@ params:
       legend_exclude:
         value:
         description: "metadata variables to exclude"
+end:
+# 
+  
 ---
 
 ```{r tackle.setup, include=FALSE}
@@ -89,6 +97,7 @@ dist_no_na <- function(mat) {
 }
 make_new_gct <- function(gct, mat){
   # make a new gct object with the same metadata as the original
+  # this only works if mat is same dimension as original mat
   new("GCT", mat=mat,
       rid = gct@rid,
       cid=gct@cid,
@@ -99,7 +108,8 @@ make_new_gct <- function(gct, mat){
 ```
 
 
-# results {.tabset}
+# results 
+`{.tabset} is a feature we may use later`
 
 ## metadata
 ```{r, label='tackle.cdesc'}
@@ -120,7 +130,7 @@ gct@cdesc %>%
 
 
 ## metrics
-```{r, label="tackle.metrics"}
+```{r, label="tackle-metrics"}
 gcts %>% map(
   ~cmapR::mat(.) %>% dim
 )
@@ -152,7 +162,9 @@ render_cluster_report <- function(method="kmeans"){
   
 }
 .out <- render_cluster_report(method='kmeans')
-htmltools::includeHTML(.out)
+
+#htmltools::includeHTML(.out)
+.out %>%  htmltools::includeHTML() 
 # TODO: loop through all the methods 
 #.out <- render_cluster_report(method='pam')
 #htmltools::includeHTML(.out)
@@ -210,11 +222,12 @@ htmltools::includeHTML(.out)
   filter(id.x == "928") %>%
   mutate(id.y = factor(id.y, levels=gct@cid, ordered = T)) 
  
-.gene <- .sel$rdesc %>% unique
-.sel %>% 
-  ggpubr::ggbarplot(x='id.y', y="value",
-                  title = .gene,
-                  color = params$color) %>%
-  ggpar(x.text.angle = 90)
+# .gene <- .sel$rdesc %>% unique
+# .sel %>% 
+#   ggpubr::ggbarplot(x='id.y', y="value",
+#                   title = .gene,
+#                   color = params$color) %>%
+#   ggpar(x.text.angle = 90)
+.sel
 ```
 

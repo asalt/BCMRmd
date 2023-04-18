@@ -7,13 +7,18 @@ params:
   subtitle: "<subtitle>"
   ROOTPATH: "./testdata"
 #  ROOTPATH: "`r fs::path_wd('.')`"
-
+  logging:
+    value:
+      message: FALSE
+      warning: FALSE
 ---
 
 
-```{r}
-
-  ROOTPATH<- "./testdata"
+```{r, label=masic-front}
+knitr::opts_chunk$set(message = params$logging$MESSAGE)
+knitr::opts_chunk$set(warning = params$logging$WARNING)
+  
+ROOTPATH<- "./testdata"
 library(fs)
 library(dplyr)
 library(tidyr)
@@ -30,6 +35,12 @@ library(purrr)
 library(pillar)
 library(readr)
 library(purrr)
+
+library(tydygraphs)
+
+library(dygraphs)
+
+library(sparkline)
 
 ROOTPATH<- params$ROOTPATH
 
@@ -230,31 +241,29 @@ if (df %>% length() == 0)
 ```
 
 ```{r, label='masic-sparkline'}
-library(tydygraphs)
-
-library(dygraphs)
-
-library(sparkline)
 #.sparkline <- df %>% group_by(id) %>% arrange(ParentIonIndex) %>%  summarise(ParentIonIntensity=spk_chr(ParentIonIntensity, width=600, height=100))
 
 .sparkline <- df %>% filter(ScanType==1) %>%  
   group_by(id) %>%
   arrange(ScanNumber) %>%
-  summarise(TotalIonIntensity=spk_chr(TotalIonIntensity, width=60, height=10))
+  summarise(TotalIonIntensity=spk_chr(TotalIonIntensity,
+                                      width=280,
+                                      #height=10,
+                                      chartRangeMin=0
+                                      )) %>% 
+  formattable::formattable(align = c("l", "r"),
+       value = formattable::formatter(
+        style = formattable::style(
+           display = "inline-block",  
+           `padding-left` = '50px',
+           `padding-right` = '10px'
+        )
+       )
+  ) %>% 
+  formattable::as.htmlwidget() %>% # this step is important
+  spk_add_deps()
 
-#.sparkline <- dfp %>% group_by(SpectrumFile) %>% arrange(ParentIonIndex) %>%   summarise(value=spk_chr(ParentIonIntensity, options=list(spotColor=FALSE)))
-# kable(test, escape=F)
-.sparkline %>% formattable::format_table(
-  align = c("l", "r"), 
-  # SpectrumFile = formattable::style(align='l'),
-  # value = formattable::formatter(
-  #  style = formattable::style(
-  #     display = "inline-block",  
-  #     `padding-left` = '50px',
-  #     `padding-right` = '10px'
-  #    )
-  # ) 
-)
+.sparkline 
 ```
 
 

@@ -15,6 +15,10 @@ params:
   scale:
     value:
       true
+  logging:
+    value:
+      message: FALSE
+      warning: FALSE
 ---
 
 
@@ -29,7 +33,9 @@ library(magrittr)
 library(scales)
 library(PCAtools)
 # library(PCAtools)
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = params$logging$MESSAGE)
+knitr::opts_chunk$set(warning = params$logging$WARNING)
 ```
 
 
@@ -91,7 +97,7 @@ if (!exists("gct")) {
   as.data.frame()
 # browser()
 # cat(.forpca)
-print(.forpca$id.x)
+#print(.forpca$id.x)
 print(rownames(.forpca))
 
 .rownames <- .forpca$id.x %>% as.character() # just to be clear
@@ -119,16 +125,21 @@ rownames(.metadata)
 ```{r, label=pca-elbow}
 
 .elbow <- findElbowPoint(.pcaobj$variance)
-screeplot(.pcaobj,
+.p <- screeplot(.pcaobj,
   components = 1:10,
   axisLabSize = 18,
   titleLabSize = 22,
   vline = .elbow
-) +
+) 
+#
+
+.p +
   geom_label(aes(
-    x = .elbow + 1, y = 50,
+    x = .elbow - 1,
+    y = 50,
     label = "Elbow method", vjust = -1, size = 8
   ))
+
 ```
 
 ## PCA Results { .tabset }

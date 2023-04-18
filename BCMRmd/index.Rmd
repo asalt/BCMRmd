@@ -22,7 +22,7 @@ params:
     value:
       tackle: true 
       E2G: false
-      MASIC: false
+      MASIC: true
       denovo: false
   E2G:
     value:
@@ -128,10 +128,16 @@ knitr::knit_hooks$set(debug = function(before, options, envir) {
 
 
 # MASIC
-```{r, results='hide', eval=params$routines$MASIC, include=params$routines$MASIC}
+```{r, label=index-render-masic, results='hide', eval=params$routines$MASIC, include=params$routines$MASIC}
+
+.new_params <- params$MASIC
+.new_params$logging <- params$logging
+
 rmarkdown::render("MASIC.Rmd",
   output_file = "MASIC.html",
-  quiet = T
+  quiet = T,
+  params = .new_params,
+  envir = new.env(),
 )
 # knitr::knit_child('MASIC.Rmd')
 ```
@@ -173,7 +179,7 @@ rmarkdown::render("MASIC.Rmd",
 .dirname <- normalizePath(dirname(".out"))
 (.dirname)
 ```
-```{r}
+```{r, label=index-blank123}
 # rint(normalizePath(dirname('.')) )
 # rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
 # render_cluster_report <- function(){

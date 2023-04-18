@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 output:
   html_document:
     code_folding: hide
-    highlight:  # pygments, kate, monochrome, zenburn
+    highlight: zenburn # pygments, kate, monochrome, zenburn
     toc: yes
 
 params:
@@ -318,13 +318,14 @@ next
   mutate(id.y = factor(id.y, levels = gct@cid, ordered = T))
 
 .gene <- .sel$rdesc %>% unique()
-.color <- ifelse(!is.null(params$color) == T, params$color, FALSE)
+.color <- ifelse(!is.null(params$color) == T, params$color, 'black')
 .sel %>%
   ggpubr::ggbarplot(
-    x = "id.y", y = "value",
+    x = "id.y",
+    y = "value",
     title = .gene,
     # color = case(params$color, F),
-    color = ifelse(!is.null(params$color) == T, params$color, FALSE),
+    color = .color
   ) %>%
   ggpar(x.text.angle = 90)
 

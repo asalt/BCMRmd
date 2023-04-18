@@ -16,7 +16,7 @@ params:
     value:
   ROOTPATH:
     #value: "`normalizePath(dirname('.'))`"
-    value: ".."
+    value: "../.."
     description: supposed to be dynamic
   routines:
     value:
@@ -24,6 +24,10 @@ params:
       E2G: false
       MASIC: true
       denovo: false
+  MASIC:
+      value:
+        ROOTPATH:
+          value: "../../"
   E2G:
     value:
       ANOTHER:

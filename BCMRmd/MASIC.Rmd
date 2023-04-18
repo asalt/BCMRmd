@@ -5,8 +5,8 @@ date: "`r Sys.Date()`"
 output: html_document
 params:
   subtitle: "<subtitle>"
-  ROOTPATH: "./testdata"
-#  ROOTPATH: "`r fs::path_wd('.')`"
+  ROOTPATH: ".."
+  #ROOTPATH: "`r fs::path_wd('.')`"
   logging:
     value:
       message: FALSE
@@ -18,7 +18,7 @@ params:
 knitr::opts_chunk$set(message = params$logging$MESSAGE)
 knitr::opts_chunk$set(warning = params$logging$WARNING)
   
-ROOTPATH<- "./testdata"
+#ROOTPATH<- "./testdata"
 library(fs)
 library(dplyr)
 library(tidyr)
@@ -42,11 +42,51 @@ library(dygraphs)
 
 library(sparkline)
 
-ROOTPATH<- params$ROOTPATH
+ROOTPATH<- fs::path_abs(params$ROOTPATH)
 
 ( ROOTPATH )
 ```
 
+
+```{r, label='masic-log-util'}
+LOGFILE <- "MASIC.log"
+log_variable <- function(variable_name, variable_value) {
+  summary_value <- create_summary(variable_value)
+  sink(LOGFILE, append = TRUE)
+  cat("Logged Variables\n")
+  # print(logged_variables)
+  print(variable_name)
+  print(summary_value)
+  cat("\n")
+  sink()
+  # data.frame(Name = variable_name, Value = toString(variable_value), stringsAsFactors = FALSE)
+  # c(variable_name, summary_value) %>% map(message)
+  return(variable_value)
+
+
+}
+
+data_frame <- tibble
+create_summary <- function(input) {
+  if (is.data.frame(input)) {
+    .x <- pillar::glimpse(input)
+    .log <- list(names(input), input)
+    return(.log)
+  } else if (is.list(input)) {
+    if (length(input) == 0) {
+      return("Empty list")
+    }
+    input_summary <- lapply(input, create_summary) # recursive apply the next level of `input` to self
+    names(input_summary) <- names(input)
+    return(input_summary)
+  } else {
+    #return(summary(input))
+    return(input)
+  }
+}
+log_variable('ROOTPATH', list(name=ROOTPATH))
+
+```
 
 ```{r label="func def for summarizing continuous data"}
 # in the future, likely to replace with tools provided in: https://github.com/easystats/report
@@ -191,8 +231,10 @@ SCANSTAT_MASIC_FILES <- fs::dir_ls(
   path = ROOTPATH,
   recurse = TRUE,
   regexp = ".ScanStats.txt"
-  #regexp = ".ScanStats.txt"
+  #regexp = ".*ScanStats.txt"
  )
+log_variable("SCANSTAT_MASIC_FILES", SCANSTAT_MASIC_FILES)
+cat(SCANSTAT_MASIC_FILES)
 
 REPORTERION_MASIC_FILES <- fs::dir_ls(
   path = ROOTPATH,
@@ -241,7 +283,10 @@ if (df %>% length() == 0)
 ```
 
 ```{r, label='masic-sparkline'}
+cat(colnames(df))
 #.sparkline <- df %>% group_by(id) %>% arrange(ParentIonIndex) %>%  summarise(ParentIonIntensity=spk_chr(ParentIonIntensity, width=600, height=100))
+
+#if (!("ScanType" %in% colnames(df))
 
 .sparkline <- df %>% filter(ScanType==1) %>%  
   group_by(id) %>%

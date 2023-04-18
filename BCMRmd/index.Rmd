@@ -9,7 +9,8 @@ output:
     highlight:  # pygments, kate, monochrome, zenburn
     toc: yes
     includes:
-      in_header: header.html 
+      #in_header: header.html 
+      in_header:
 mainfont: Noto Sans
 params:
   paramfile:
@@ -203,6 +204,7 @@ rmarkdown::render("MASIC.Rmd",
 
 LINK
 ```{r tackle-link, echo=F, results="asis"}
+.out <- fs::path_rel(.out)
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 print(.html)
 ## {-}

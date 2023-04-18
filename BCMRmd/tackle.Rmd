@@ -11,7 +11,7 @@ output:
 params:
   ROOTPATH: 
     #value: "`normalizePath(dirname('.'))`"
-    value: ".."
+    value: "../.."
     description: supposed to be dynamic
   paramfile:
     value: ""
@@ -83,30 +83,52 @@ logging options
 # WARNING<-F
 knitr::opts_chunk$set(message = params$logging$message, warning = params$logging$warning)
 
+LOGFILE <- "MASIC.log"
+log_variable <- function(variable_name, variable_value) {
+  summary_value <- create_summary(variable_value)
+  sink(LOGFILE, append = TRUE)
+  cat("Logged Variables\n")
+  # print(logged_variables)
+  print(variable_name)
+  print(summary_value)
+  cat("\n")
+  sink()
+  # data.frame(Name = variable_name, Value = toString(variable_value), stringsAsFactors = FALSE)
+  # c(variable_name, summary_value) %>% map(message)
+  return(variable_value)
 
-slice_gct_row <- function(gct, rowix = 1:10) {
 
-  # Slice the data matrix
-  # sliced_matrix <- gct@mat[rowix, colix]
-  sliced_matrix <- gct@mat[rowix, ]
-
-  # Slice the row and column metadata
-  sliced_rdesc <- gct@rdesc[rowix, ]
-  # sliced_cdesc <- gct@cdesc[colix, ]
-  sliced_cdesc <- gct@cdesc
-
-  # Create a new GCT object with the sliced data
-  sliced_gct <- cmapR::GCT(mat = sliced_matrix, rdesc = sliced_rdesc, cdesc = sliced_cdesc)
-  sliced_gct
 }
+
+data_frame <- tibble
+create_summary <- function(input) {
+  if (is.data.frame(input)) {
+    .x <- pillar::glimpse(input)
+    .log <- list(names(input), input)
+    return(.log)
+  } else if (is.list(input)) {
+    if (length(input) == 0) {
+      return("Empty list")
+    }
+    input_summary <- lapply(input, create_summary) # recursive apply the next level of `input` to self
+    names(input_summary) <- names(input)
+    return(input_summary)
+  } else {
+    #return(summary(input))
+    return(input)
+  }
+}
+
+
+
 ```
 
 tackle load
 
 ```{r label=tackle.load}
-PATH <- "."
+ROOTPATH <- params$ROOTPATH
 gct_files <- fs::dir_ls(
-  path = PATH,
+  path = ROOTPATH,
   recurse = TRUE,
   regexp = ".gct"
 )
@@ -123,7 +145,6 @@ gct <- gcts[[1]]
 
 metadata <- gct@cdesc %>% as.data.frame() # no tibbles allowed
 # DEBUGING
-# gct %<>% slice_gct_row(rowix = 1:300)
 
 # print(gcts)
 ```
@@ -311,7 +332,7 @@ next
 
 ## YFG
 
-```{r, label=tackle-onegene, eval=T, fig.width=10, fig.height=7}
+```{r, label=tackle-onegene, eval=F, fig.width=10, fig.height=7}
 .sel <- gct %>%
   melt_gct() %>%
   filter(id.x == "928") %>%

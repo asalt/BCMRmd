@@ -145,12 +145,12 @@ rownames(.metadata)
 ## PCA Results { .tabset }
 ```{r, label=pca-biplot, fig.width=7, fig.height=7}
 # https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
-.color_by <- "SampleType"
+#.color_by <- "SampleType"
 #  get rom input
 if ("metavar1" %in% colnames(gct@cdesc)) .color_by <- "metavar1"
 # if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
 
-mybiplot <- function(.pcaobj, ...) {
+mybiplot <- function(.pcaobj, colby=NULL, ...) {
   biplot(
     .pcaobj,
     showLoadings = T,
@@ -158,7 +158,7 @@ mybiplot <- function(.pcaobj, ...) {
     sizeLoadingsNames = 2,
     hline = 0,
     vline = 0,
-    colby = .color_by,
+    colby = colby,
     # colby="SampleType",
     # shape='OrganSite',
     shapekey = NULL,

@@ -6,7 +6,6 @@ output:
   html_document:
     code_folding: hide
     highlight: zenburn # pygments, kate, monochrome, zenburn
-    toc: yes
     includes:
       #in_header: header.html 
 params:
@@ -29,6 +28,7 @@ library(broom)
 library(magrittr)
 library(scales)
 library(PCAtools)
+# library(PCAtools)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -37,19 +37,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, label=pca-environment, include=F}
 method <- params$method
-#check if .gct obj is in environment
-if (!exists("gct")){
+# check if .gct obj is in environment
+if (!exists("gct")) {
   set.seed(369)
-  .mat <- matrix( runif(1000), nrow=100, ncol=10 )
+  .mat <- matrix(runif(1000), nrow = 100, ncol = 10)
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
   .cdesc <- tibble::tibble(
-    id=.cids,
-    metavar1=sample(letters[1:5], 10, replace=T) %>% as.factor(),
-    metavar2=sample(letters[1:5], 10, replace=T) %>% as.factor(),
-                           )
-  gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc=.cdesc)
-  #gct = new(cmgct)
+    id = .cids,
+    metavar1 = sample(letters[1:5], 10, replace = T) %>% as.factor(),
+    metavar2 = sample(letters[1:5], 10, replace = T) %>% as.factor(),
+  )
+  gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc = .cdesc)
+  # gct = new(cmgct)
 } else {
   # If 'gct' exists, just use the existing one
   cat("Using existing 'gct'.\n")
@@ -59,9 +59,9 @@ if (!exists("gct")){
 
 ```{r, label=pca-begin}
 # from https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
-#.forpca <- mat(gct)
+# .forpca <- mat(gct)
 
-# rows are genes 
+# rows are genes
 # columns are samples
 # id.x is gene
 # id.y is sample
@@ -69,79 +69,106 @@ if (!exists("gct")){
 # .scale <- TRUE
 .center <- params$center
 .scale <- params$scale
-(.center)
-(.scale)
-.rescaled_gct_mat <- gct %>% cmapR::melt_gct() %>% group_by(id.x) %>% mutate(
-  value=scale(
-    value, # expression value after cmapR::melt_gct
-    center = !!.center,
-    scale = !!.scale
+# (.center)
+# (.scale)
+.rescaled_gct_mat <- gct %>%
+  cmapR::melt_gct() %>%
+  group_by(id.x) %>%
+  mutate(
+    value = scale(
+      value, # expression value after cmapR::melt_gct
+      center = !!.center,
+      scale = !!.scale
+    )
   )
-)
-.forpca <- .rescaled_gct_mat %>% mutate(id.x=as.character(id.x)) %>% pivot_wider(values_from = value,
-                                             id_cols = id.x,
-                                             names_from = id.y
-) %>% as.data.frame 
-.rownames <- .forpca$id.x # just to be clear
-rownames(.forpca) <- .rownames
-#.forpca %<>% 
-.forpca <- .forpca[ , gct@cid ] # put back in order
-#.forpca %<>% subset(select=c(-id.x))
-#(.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
-#cmapR::
-#.forpca
-#.rownames<-apply(gct@rdesc, 1, paste, collapse = " ")
-#.gct@rdesc %>% head %>% rowwise() %>% mutate(x=str_c(everything(  )))
-#.gct@rdesc[.gct@rdesc == rownames(.forpca)]
+.forpca <- .rescaled_gct_mat %>%
+  mutate(id.x = as.character(id.x)) %>%
+  pivot_wider(
+    values_from = value,
+    id_cols = id.x,
+    names_from = id.y
+  ) %>%
+  as.data.frame()
+# browser()
+# cat(.forpca)
+print(.forpca$id.x)
+print(rownames(.forpca))
 
-library(PCAtools)
-#print('pca')
+.rownames <- .forpca$id.x %>% as.character() # just to be clear
+rownames(.forpca) <- .rownames
+# .forpca %<>%
+.forpca <- .forpca[, gct@cid] # put back in order
+# .forpca %<>% subset(select=c(-id.x))
+# (.rownames<-apply(head(.gct@rdesc), 1, paste, collapse = NULL))
+# cmapR::
+# .forpca
+# .rownames<-apply(gct@rdesc, 1, paste, collapse = " ")
+# .gct@rdesc %>% head %>% rowwise() %>% mutate(x=str_c(everything(  )))
+# .gct@rdesc[.gct@rdesc == rownames(.forpca)]
+.metadata <- gct@cdesc %>% as.data.frame()
+rownames(.metadata)
+
+# print('pca')
 .pcaobj <- PCAtools::pca(
   .forpca,
-  metadata = gct@cdesc %>% as.data.frame # no tibbles allowed
+  metadata = gct@cdesc %>% as.data.frame() # no tibbles allowed
 )
 ```
+## PCA Results
 
 ```{r, label=pca-elbow}
 
 .elbow <- findElbowPoint(.pcaobj$variance)
 screeplot(.pcaobj,
-          components = 1:10,
-          axisLabSize = 18,
-          titleLabSize = 22,
-          vline = .elbow
-  ) +
-          geom_label(aes(x = .elbow + 1, y = 50,
-                  label = 'Elbow method', vjust = -1, size = 8)
-          )
-
+  components = 1:10,
+  axisLabSize = 18,
+  titleLabSize = 22,
+  vline = .elbow
+) +
+  geom_label(aes(
+    x = .elbow + 1, y = 50,
+    label = "Elbow method", vjust = -1, size = 8
+  ))
 ```
 
+## PCA Results { .tabset }
 ```{r, label=pca-biplot, fig.width=7, fig.height=7}
 # https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
 .color_by <- "SampleType"
 #  get rom input
-if ("metavar1" %in% colnames(gct@cdesc)) .color_by <- 'metavar1'
-#if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
+if ("metavar1" %in% colnames(gct@cdesc)) .color_by <- "metavar1"
+# if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
 
-mybiplot <- function(.pcaobj, ...) biplot(
-       .pcaobj,
-       showLoadings = T,
-       ntopLoadings=5,
-       sizeLoadingsNames = 2,
-       hline=0, 
-       vline=0,
-       colby=.color_by,
-       #colby="SampleType",
-       #shape='OrganSite',
-       shapekey=NULL,
-       ellipse=T,
-       legendPosition = "right",
-       ...
-       )
-#biplot(.pcaobj, colby="metavar1")
-mybiplot(.pcaobj, x="PC1", y="PC2")
-mybiplot(.pcaobj, x="PC1", y="PC3")
+mybiplot <- function(.pcaobj, ...) {
+  biplot(
+    .pcaobj,
+    showLoadings = T,
+    ntopLoadings = 5,
+    sizeLoadingsNames = 2,
+    hline = 0,
+    vline = 0,
+    colby = .color_by,
+    # colby="SampleType",
+    # shape='OrganSite',
+    shapekey = NULL,
+    ellipse = T,
+    legendPosition = "right",
+    ...
+  )
+}
+# biplot(.pcaobj, colby="metavar1")
+```
+
+### pca.biplot-1-2 
+
+```{r, label=pca.biplot-1-2}
+mybiplot(.pcaobj, x = "PC1", y = "PC2")
+```
+
+### pca.biplot-1-3 
+
+```{r, label=pca-biplot-1-3}
+mybiplot(.pcaobj, x = "PC1", y = "PC3")
 # biplot(.pca,
 #        x="PC1",
 #        y="PC2",
@@ -154,27 +181,33 @@ mybiplot(.pcaobj, x="PC1", y="PC3")
 #        ellipse=T,
 #        legendPosition = "top"
 #        )
-
 ```
 
-```{r, label=pca-biplot2_3, fig.width=6, fig.height=6}
+### pca.biplot-2-3 
 
-mybiplot(.pcaobj, x="PC2", y="PC3")
-#.pca %>% airsplot()
+```{r, label=pca-biplot-2-3, fig.width=6, fig.height=6}
+
+mybiplot(.pcaobj, x = "PC2", y = "PC3")
+# .pca %>% airsplot()
 ```
 ```{r, label=pca-loadings1,  fig.width=7, fig.height=7}
-myplotloadings <- function(.pcaobj, ...) plotloadings(
-  .pcaobj,
-  rangeRetain = .01,
-  ...
-)
+myplotloadings <- function(.pcaobj, ...) {
+  plotloadings(
+    .pcaobj,
+    rangeRetain = .01,
+    ...
+  )
+}
 .pcaobj %>% myplotloadings(labSize = 3)
-
 ```
+
+### {-}
+
+## pca.loadings
 
 ```{r, label=pca-myplotloadings, fig.width=7, fig.height=7}
 
-.pcaobj %>% myplotloadings(labSize = 3, absolute=T )
+.pcaobj %>% myplotloadings(labSize = 3, absolute = T)
 ```
 
 
@@ -189,3 +222,4 @@ myplotloadings <- function(.pcaobj, ...) plotloadings(
 #   )
 # )
 ```
+ 

@@ -3,8 +3,11 @@
 # wildcard 
 # ( patsubst find_pat  replace_pat input_list )
 # Directories
+#SRC_DIR := BCMRmd
 SRC_DIR := BCMRmd
 TEST_DIR := test
+PARENT_DIR := $(notdir $(realpath ".."))
+
 
 # exclude files for two reasons
 # a) the file is not ready for testing
@@ -21,18 +24,28 @@ HTML_FILES := $(patsubst $(SRC_DIR)/%.Rmd, $(TEST_DIR)/%.html, $(RMD_FILES))
 PCA_OUTPUTS := $(foreach c, T F, $(foreach s, T F, $(TEST_DIR)/PCA_center_$(c)_scale_$(s).html))
 CLUSTER_OUTPUTS := $(foreach m, kmeans pam , $(TEST_DIR)/cluster_method_$(m).html)
 
+
+REPORT_OUT := "$(PARENT_DIR)_BCMRmd.html"
+
 define render_rmd
 	Rscript -e "rmarkdown::render(input = '$(abspath $(1))', output_file = '$(abspath $(2))', params = $(3))"
 endef
 
-.PHONY: all print_pca print_cluster 
-	#clean
+.PHONY: all print_pca print_cluster clean report 
 
 #all: $(CLUSTER_OUTPUTS) $(PCA_OUTPUTS)
 
 cluster: $(CLUSTER_OUTPUTS)
 
 pca: $(PCA_OUTPUTS)
+
+
+#
+#$(REPORT_OUT): $(REPORT_SRC) | $(TEST_DIR)
+	#$(call render_rmd,$<,$@,"list(param1 = 'value1', param2 = 'value2')")
+all := $(REPORT_OUT)
+	$(call render_rmd,index.Rmd,$@)
+
 
 
 print_pca:

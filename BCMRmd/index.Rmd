@@ -1,25 +1,29 @@
 ---
-title: "<>"
+title: "BCMRmd Report v0.1"
 author: "Alex Saltzman"
 date: "`r Sys.Date()`"
 tidy: formatR
 output:
   html_document:
     code_folding: hide
-    highlight: zenburn # pygments, kate, monochrome, zenburn
+    highlight:  # pygments, kate, monochrome, zenburn
     toc: yes
     includes:
-      #in_header: header.html 
+      in_header: header.html 
 mainfont: Noto Sans
 params:
   paramfile:
     value:
   ROOTPATH:
-    value: "`normalizePath(dirname('.'))`"
+    #value: "`normalizePath(dirname('.'))`"
+    value: ".."
+    description: supposed to be dynamic
   routines:
     value:
       tackle: true 
       E2G: false
+      MASIC: false
+      denovo: false
   E2G:
     value:
       ANOTHER:
@@ -67,70 +71,13 @@ params:
       b:
         value: 2
   logging:
-    value: 1
-    #MESSAGE: TRUE
-    #WARNING: TRUE
-    tackle: FALSE
-    denovo: FALSE
+    value:
+      message: FALSE
+      warning: FALSE
 ---
 
-
-
-```{r, label=local-params}
-#print(parmas)
-knitr::opts_chunk$set(root.dir = normalizePath("."))
-
-
-library(yaml)
-library(fs)
-.f <- "PARAMS.yaml"
-if (fs::file_exists(.f)){
-  local_params <- yaml::yaml.load_file(.f)
-  params <- modifyList(params, local_params)
-}
-print(params)
-
-```
-
-
-
-
-
-```{r, notebook_options}
-
-# DO_E2G <- params$DO_E2G
-# DO_tackle <- params$DO_tackle
-# 
-# MESSAGE <- params$MESSAGE
-print(params)
-WARNING<-T
-MESSAGE<-T
-# WARNING <- params$logging$WARNING
-# MESSAGE <- params$logging$MESSAGE
-
-```
-
-
-
-
-```{r settings}
-BCMBLUE <- "#002396"
-knitr::knit_hooks$set(debug = function(before, options, envir) {
-    if (!before) {
-        message(
-            paste(names(envir), as.list(envir),
-                sep = " = ", collapse = "\n"
-            )
-        )
-    }
-})
-```
-
-
-
-```{r setup, include=FALSE}
-library("glue")
-knitr::opts_chunk$set(echo = TRUE)
+# index
+```{r index_setup, include=TRUE}
 suppressPackageStartupMessages(library(cmapR))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggpubr))
@@ -140,54 +87,98 @@ suppressPackageStartupMessages(library(kableExtra))
 suppressPackageStartupMessages(library(ComplexHeatmap))
 suppressPackageStartupMessages(library(circlize))
 suppressPackageStartupMessages(library(tidymodels))
-library(tidymodels)
-library(tibble)
-library(magrittr)
+suppressPackageStartupMessages(library(tidymodels))
+suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(yaml))
+```
 
+load local params
+
+```{r, label=local-params}
+# print(parmas)
+knitr::opts_chunk$set(root.dir = normalizePath("."))
+knitr::opts_chunk$set(message = params$logging$message, warning = params$logging$warning)
+knitr::opts_chunk$set(echo = TRUE)
+
+
+.f <- "PARAMS.yaml"
+if (fs::file_exists(.f)) {
+  local_params <- yaml::yaml.load_file(.f)
+  params <- modifyList(params, local_params)
+}
+# print(params)
 ```
 
 
+
+```{r index_settings}
+BCMBLUE <- "#002396"
+knitr::knit_hooks$set(debug = function(before, options, envir) {
+  if (!before) {
+    message(
+      paste(names(envir), as.list(envir),
+        sep = " = ", collapse = "\n"
+      )
+    )
+  }
+})
+```
+
+
+
 # MASIC
-```{r, message=MESSAGE, warning=WARNING, results='hide', eval=F}
-rmarkdown::render('MASIC.Rmd', output_file = 'MASIC.html')
-#knitr::knit_child('MASIC.Rmd')
+```{r, results='hide', eval=params$routines$MASIC, include=params$routines$MASIC}
+rmarkdown::render("MASIC.Rmd",
+  output_file = "MASIC.html",
+  quiet = T
+)
+# knitr::knit_child('MASIC.Rmd')
 ```
 [MASIC](MASIC.html)
 
 
 # E2G
-```{r, label=E2G, message=MESSAGE, warning=WARNING, results='show', eval=params$routines$E2G}
-print(params$E2G)
-print(params$E2G$value$ANOTHER)
+```{r, label=E2G, results='show', eval=params$routines$E2G, include=params$routines$E2G}
+# print(params$E2G)
+# print(params$E2G$value$ANOTHER)
 .new_params <- params$E2G
- .out  <- rmarkdown::render('E2G.Rmd', output_file = 'E2G.html', 
-                            params=.new_params,
-                            envir = new.env()
-                            )
+.new_params$logging <- params$logging
+.out <- rmarkdown::render("E2G.Rmd",
+  output_file = "E2G.html",
+  params = .new_params,
+  envir = new.env(),
+  quiet = T,
+)
 # #knitr::knit_child('MASIC.Rmd')
 # htmltools::includeHTML(.out)
 ```
 
 
 # tackle
-```{r, label=tackle, message=MESSAGE, warning=WARNING, results='hide', eval=params$routines$tackle}
-#.params<-params$tackle
-cat(as.character(params$tackle))
-.out <- rmarkdown::render('tackle.Rmd', output_file = 'tackle.html',
-                          params=params$tackle,
-                          envir = new.env()
-                          )#, params=.params)
+```{r, label=tackle, results='show', message=params$logging$message, warning=params$logging$warning,   eval=params$routines$tackle}
+# .params<-params$tackle
+# cat(as.character(params$tackle))
 
-print(.out)
-.dirname <- normalizePath(dirname('.out')) 
+.new_params <- params$tackle
+.new_params$logging <- params$logging
+.out <- rmarkdown::render("tackle.Rmd",
+  output_file = "tackle.html",
+  params = params$tackle,
+  envir = new.env(),
+  quiet = T
+) # , params=.params)
+
+# print(.out)
+.dirname <- normalizePath(dirname(".out"))
 (.dirname)
 ```
 ```{r}
-#rint(normalizePath(dirname('.')) )
-#rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
+# rint(normalizePath(dirname('.')) )
+# rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
 # render_cluster_report <- function(){
 #   .output_file_name <- paste0("cluster_", "method_", method, ".html")
-#   rmarkdown::render("cluster.Rmd", 
+#   rmarkdown::render("cluster.Rmd",
 #               output_file=.output_file_name,
 #               params=list()
 #               #params=.params,
@@ -196,14 +187,24 @@ print(.out)
 #               #documentation=1,
 #               )
 #   return(.output_file_name)
-.out %>% htmltools::includeHTML()
-#fs::path_join(c("../", .out)) %>%  htmltools::includeHTML() 
+# .out %>% htmltools::includeHTML()
+# fs::path_join(c("../", .out)) %>%  htmltools::includeHTML()
+```
+
+LINK
+```{r tackle-link, echo=F, results="asis"}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+print(.html)
+## {-}
 ```
 
 
 # denovo
-```{r, label=denovo, message=MESSAGE, warning=WARNING, results='hide', eval=F}
-rmarkdown::render('denovo.Rmd', output_file = 'denovo.html')
+```{r, label=denovo, results='hide', eval=F}
+rmarkdown::render("denovo.Rmd",
+  output_file = "denovo.html",
+  quiet = T
+)
 ```
 [denvo](denovo.html)
 

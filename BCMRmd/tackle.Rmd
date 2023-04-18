@@ -2,15 +2,34 @@
 title: "tackle"
 author: "AlexSaltman"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
+    highlight:  # pygments, kate, monochrome, zenburn
+    toc: yes
 
 params:
   ROOTPATH: 
-    value: "`normalizePath(dirname('.'))`"
+    #value: "`normalizePath(dirname('.'))`"
+    value: ".."
+    description: supposed to be dynamic
   paramfile:
     value: ""
   cluster_methods:
     value: [kmeans, pam]
+  pca:
+    value:
+      color:
+        value:
+      marker:
+        value:
+      annotate:
+        value: true
+      center:
+        value: true
+      scale: 
+        value:
+          true
   cluster:
     value:
       cluster_rows:
@@ -32,52 +51,84 @@ params:
       legend_exclude:
         value:
         description: "metadata variables to exclude"
+  logging:
+    value:
+      message: FALSE
+      warning: FALSE
 end:
 # 
   
 ---
 
 ```{r tackle.setup, include=FALSE}
-library(tidymodels)
-library(cmapR)
-library(magrittr)
-library(gt)
-library(fs)
-library(purrr)
-library(ggpubr)
-library(tibble)
+suppressPackageStartupMessages(library(tidymodels))
+suppressPackageStartupMessages(library(cmapR))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(gt))
+suppressPackageStartupMessages(library(fs))
+suppressPackageStartupMessages(library(purrr))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(tibble))
+# let's pick one
+library(DT)
+# library(reactable)
+#
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-# logging
+logging options
 ```{r label=tackle-logging}
-MESSAGE<-T
-WARNING<-T
-```
-# load
+# MESSAGE<-F
+# WARNING<-F
+knitr::opts_chunk$set(message = params$logging$message, warning = params$logging$warning)
 
+
+slice_gct_row <- function(gct, rowix = 1:10) {
+
+  # Slice the data matrix
+  # sliced_matrix <- gct@mat[rowix, colix]
+  sliced_matrix <- gct@mat[rowix, ]
+
+  # Slice the row and column metadata
+  sliced_rdesc <- gct@rdesc[rowix, ]
+  # sliced_cdesc <- gct@cdesc[colix, ]
+  sliced_cdesc <- gct@cdesc
+
+  # Create a new GCT object with the sliced data
+  sliced_gct <- cmapR::GCT(mat = sliced_matrix, rdesc = sliced_rdesc, cdesc = sliced_cdesc)
+  sliced_gct
+}
+```
+
+tackle load
 
 ```{r label=tackle.load}
-print(params$color)
 PATH <- "."
 gct_files <- fs::dir_ls(
   path = PATH,
   recurse = TRUE,
   regexp = ".gct"
- )
-
-
-( gct_files )
-
-gcts <- gct_files %>% 
-purrr::map(
-  cmapR::parse_gctx
 )
-print(gcts)
+stringr::str_c("Found", gct_files) %>% cat()
+# ( gct_files )
 
+gcts <- gct_files %>%
+  purrr::map(
+    # ~cmapR::parse_gctx()
+    ~ cmapR::parse_gctx(.x) # , rid=1:100)
+  )
+gct <- gcts[[1]]
+
+
+metadata <- gct@cdesc %>% as.data.frame() # no tibbles allowed
+# DEBUGING
+# gct %<>% slice_gct_row(rowix = 1:300)
+
+# print(gcts)
 ```
 
-# funcs
+tackle funcs
 ```{r, label=tackle-funcs}
 
 myzscore <- function(value, minval = NA, remask = TRUE) {
@@ -95,33 +146,45 @@ dist_no_na <- function(mat) {
   edist <- dist(mat)
   return(edist)
 }
-make_new_gct <- function(gct, mat){
+make_new_gct <- function(gct, mat) {
   # make a new gct object with the same metadata as the original
   # this only works if mat is same dimension as original mat
-  new("GCT", mat=mat,
-      rid = gct@rid,
-      cid=gct@cid,
-      rdesc=gct@rdesc,
-      cdesc=gct@cdesc,
-        )
+  new("GCT",
+    mat = mat,
+    rid = gct@rid,
+    cid = gct@cid,
+    rdesc = gct@rdesc,
+    cdesc = gct@cdesc,
+  )
 }
 ```
 
 
 # results 
-`{.tabset} is a feature we may use later`
+maybe `{.tabset} is a feature we may use later`
 
 ## metadata
-```{r, label='tackle.cdesc'}
-gct <- gcts[[1]]
-#.gct <- gcts[[1]]
-#.gct@cdesc
-gct@cdesc %>% 
-  select(recno, runno, searchno, label, everything()) %>% 
-  gt::gt(
-  caption="metadata"
-)
+```{r, label='tackle-cdesc', eval=T}
+# .gct <- gcts[[1]]
+# .gct@cdesc
 
+# gct@cdesc %>%
+#   select(recno, runno, searchno, label, everything()) %>%
+#   gt::gt(
+#   caption="metadata"
+# )
+
+.table <- gct@cdesc %>%
+  select(recno, runno, searchno, label, everything()) %>%
+  DT::datatable(
+    options <- list(
+      style = c(
+        "compact",
+        "stripe"
+      )
+    )
+  )
+.table
 ```
 
 
@@ -132,7 +195,7 @@ gct@cdesc %>%
 ## metrics
 ```{r, label="tackle-metrics"}
 gcts %>% map(
-  ~cmapR::mat(.) %>% dim
+  ~ cmapR::mat(.) %>% dim()
 )
 gct <- gcts[[1]]
 # all below analysis is written to analyze 1 gct object
@@ -146,31 +209,46 @@ render cluster.Rmd
 
 .params <- params$cluster
 
-#.params$method <- "kmeans"
+# .params$method <- "kmeans"
 
-render_cluster_report <- function(method="kmeans"){
+render_cluster_report <- function(method = "kmeans") {
   .output_file_name <- paste0("cluster_", "method_", method, ".html")
-  rmarkdown::render("cluster.Rmd", 
-              output_file=.output_file_name,
-              params=list(method=method)
-              #params=.params,
-              #envir = globalenv(),
-              #envir = new_env
-              #documentation=1,
-              )
+
+  # log_fh <- file("render_log.txt", open = "a")
+  # sink(log_fh, type = "message")
+
+
+  rmarkdown::render("cluster.Rmd",
+    output_file = .output_file_name,
+    params = list(method = method),
+    quiet = T
+
+    # params=.params,
+    # envir = globalenv(),
+    # envir = new_env
+    # documentation=1,
+  )
   return(.output_file_name)
-  
+
+  # not sure if this is exactly how to get the path right
+  # c(params$ROOTPATH, .output_file_name) %>% fs::path_join() %>% fs::path_abs()
+  # sink(type = "message")
+  # close(log_fh)
 }
-.out <- render_cluster_report(method='kmeans')
+.out <- render_cluster_report(method = "kmeans")
 
-#htmltools::includeHTML(.out)
-.out %>%  htmltools::includeHTML() 
-# TODO: loop through all the methods 
-#.out <- render_cluster_report(method='pam')
-#htmltools::includeHTML(.out)
-  
-#htmltools::includeHTML("cluster1.html")
+# htmltools::includeHTML(.out)
+# .out %>%  htmltools::includeHTML()
+# TODO: loop through all the methods
+# .out <- render_cluster_report(method='pam')
+# htmltools::includeHTML(.out)
 
+# htmltools::includeHTML("cluster1.html")
+```
+
+```{r tackle-cluster-report-sep-page, echo=T, results="asis"}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+## {-}
 ```
 
 
@@ -179,55 +257,79 @@ render_cluster_report <- function(method="kmeans"){
 render PCA.Rmd
 ```{r, label=tackle-pca, message=T, warning=T, results='show', eval=T}
 
-.params <- params$cluster
+.params <- params$pca
 
-#.params$method <- "kmeans"
+# .params$method <- "kmeans"
 
-render_pca_report <- function(center=T, scale=F){
+render_pca_report <- function(center = T, scale = F) {
   .output_file_name <- paste0("PCA", "center_", center, "scale_", scale, ".html")
-  rmarkdown::render("PCA.Rmd", 
-              output_file=.output_file_name,
-              params=list(
-                center=center,
-                scale=scale
-              )
-              #params=.params,
-              #envir = globalenv(),
-              #envir = new_env
-              #documentation=1,
-              )
+  rmarkdown::render("PCA.Rmd",
+    output_file = .output_file_name,
+    quiet = T,
+    params = list(
+      center = center,
+      scale = scale
+    )
+    # params=.params,
+    # envir = globalenv(),
+    # envir = new_env
+    # documentation=1,
+  )
   return(.output_file_name)
-  
+  # c(params$ROOTPATH, .output_file_name) %>% fs::path_join() %>% fs::path_abs()
 }
+```
+
+```{r, echo=T}
 # TODO: allow customization
 .center <- T
 .scale <- T
-.out <- render_pca_report(center=.center, scale=T)
-htmltools::includeHTML(.out)
+.out <- render_pca_report(center = .center, scale = T)
+# html
+# .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
 
-.out <- render_pca_report(center=.center, scale=F)
-htmltools::includeHTML(.out)
+# htmltools::includeHTML(.out)
+```
+LINK
+```{r pca-report-1-html-pagetest, echo=F, results="asis"}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
 ## {-}
+```
+next
 
-# another section
+```{r pca-report-2}
+.out <- render_pca_report(center = .center, scale = F)
+# htmltools::includeHTML(.out)
+```
 
-
+```{r pca-report-2-html-pagetest, echo=F, results="asis"}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+## {-}
 ```
 
 ## YFG
 
-```{r, label=tackle-onegene, eval=T}
-.sel <- gct %>% 
+```{r, label=tackle-onegene, eval=T, fig.width=10, fig.height=7}
+.sel <- gct %>%
   melt_gct() %>%
   filter(id.x == "928") %>%
-  mutate(id.y = factor(id.y, levels=gct@cid, ordered = T)) 
- 
-# .gene <- .sel$rdesc %>% unique
-# .sel %>% 
-#   ggpubr::ggbarplot(x='id.y', y="value",
-#                   title = .gene,
-#                   color = params$color) %>%
-#   ggpar(x.text.angle = 90)
-.sel
+  mutate(id.y = factor(id.y, levels = gct@cid, ordered = T))
+
+.gene <- .sel$rdesc %>% unique()
+.color <- ifelse(!is.null(params$color) == T, params$color, FALSE)
+.sel %>%
+  ggpubr::ggbarplot(
+    x = "id.y", y = "value",
+    title = .gene,
+    # color = case(params$color, F),
+    color = ifelse(!is.null(params$color) == T, params$color, FALSE),
+  ) %>%
+  ggpar(x.text.angle = 90)
+
+
+.sel %>% DT::datatable()
+# .sel
 ```
 

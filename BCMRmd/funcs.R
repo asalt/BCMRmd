@@ -1,6 +1,8 @@
 myzscore <- function(value, minval = NA, remask = TRUE) {
   mask <- is.na(value)
-  if (is.na(minval)) minval <- min(value, na.rm = TRUE)
+  if (is.na(minval)) {
+    minval <- min(value, na.rm = TRUE)
+  }
   value[is.na(value)] <- minval
   out <- scale(value)
   if (remask == TRUE) {
@@ -13,12 +15,7 @@ dist_no_na <- function(mat) {
   edist <- dist(mat)
   return(edist)
 }
-make_new_gct <- function(gct, mat){
+make_new_gct <- function(gct, mat) {
   # make a new gct object with the same metadata as the original
-  new("GCT", mat=mat,
-      rid = gct@rid,
-      cid=gct@cid,
-      rdesc=gct@rdesc,
-      cdesc=gct@cdesc,
-  )
+  new("GCT", mat = mat, rid = gct@rid, cid = gct@cid, rdesc = gct@rdesc, cdesc = gct@cdesc, )
 }

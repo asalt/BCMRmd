@@ -9,14 +9,22 @@ output:
     toc: yes
 
 params:
+  routines:
+    value:
+      cluster:
+        value:
+          false
+      PCA:
+        value:
+          true
   ROOTPATH: 
     #value: "`normalizePath(dirname('.'))`"
-    value: "../.."
+    value: ".."
     description: supposed to be dynamic
   paramfile:
     value: ""
   cluster_methods:
-    value: [kmeans, pam]
+    value: [kmeans]
   pca:
     value:
       color:
@@ -226,7 +234,7 @@ gct <- gcts[[1]]
 
 
 render cluster.Rmd
-```{r, label=tackle-cluster, message=T, warning=T, results='show', eval=T}
+```{r, label=tackle-cluster, message=T, warning=T, results='show', eval=params$routines$cluster}
 
 .params <- params$cluster
 
@@ -261,6 +269,7 @@ render_cluster_report <- function(method = "kmeans") {
 # htmltools::includeHTML(.out)
 # .out %>%  htmltools::includeHTML()
 # TODO: loop through all the methods
+#.params <- params$cluster$
 # .out <- render_cluster_report(method='pam')
 # htmltools::includeHTML(.out)
 

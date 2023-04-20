@@ -2,7 +2,13 @@
 title: "MASIC"
 author: "Alex Saltzman"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+#output: html_document:
+#  code
+
 params:
   subtitle: "<subtitle>"
   ROOTPATH: ".."
@@ -25,8 +31,6 @@ library(tidyr)
 library(purrr)
 library(vroom)
 library(dplyr)
-
-library(fs)
 library(knitr)
 library(tibble)
 library(stringr)
@@ -41,6 +45,7 @@ library(tydygraphs)
 library(dygraphs)
 
 library(sparkline)
+library(plotly)
 
 ROOTPATH<- fs::path_abs(params$ROOTPATH)
 
@@ -219,11 +224,11 @@ make_test_data <- function(column_names, num_rows=300) {
 
 
 ```{r label=masic.load}
+log_variable("ROOTPATH", ROOTPATH)
 SIC_MASIC_FILES <- fs::dir_ls(
   path = ROOTPATH,
   recurse = TRUE,
-  regexp = ".SICstats.txt"
-  #regexp = ".ScanStats.txt"
+  regexp = ".*SICstats.txt"
  )
 
 
@@ -245,8 +250,9 @@ REPORTERION_MASIC_FILES <- fs::dir_ls(
 
 ( SIC_MASIC_FILES )
 
-df <- SIC_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = 300) %>% mutate(id = fs::path_file(.x)))
-df <- SCANSTAT_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = 300) %>% mutate(id = fs::path_file(.x)))
+df <- SIC_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = Inf) %>% mutate(id = fs::path_file(.x)))
+scanstats <- SCANSTAT_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = Inf) %>% mutate(id = fs::path_file(.x)))
+#df <- SCANSTAT_MASIC_FILES %>%  map_df(~ vroom(.x, n_max = 300) %>% mutate(id = fs::path_file(.x)))
 # one big dataframe with file id as one column
 
 if (df %>% length() == 0)
@@ -271,6 +277,24 @@ if (df %>% length() == 0)
 
 ```
 
+```{r, label=MASIC-scanstats}
+.negsel <- c(
+ "Dataset",
+ "ParentIonIndex",
+ "SurveyScanNumber",
+ "FragScanNumber",
+ "OptimalPeakApexScanNumber",
+ "PeakApexOverrideParentIonIndex",
+ "CustomSICPeak",
+ "PeakScanStart",
+ "PeakScanEnd"
+             )
+#scanstats %>% 
+#  select(-any_of(.negsel)) %>% 
+#  modelsummary::datasummary_skim()
+```
+
+
 
 ```{r}
 # df %>% 
@@ -282,20 +306,173 @@ if (df %>% length() == 0)
 
 ```
 
+
+## MS1
+```{r, label='masic-scanstats-sparkline-MS1-total'}
+.sparkline <- scanstats %>% 
+    filter(ScanType==1) %>% 
+    group_by(id) %>%
+    arrange(ScanNumber) %>%
+  summarise(TotalIonIntensity=
+              spk_chr(
+                TotalIonIntensity,
+                width=280,
+                #height=10,
+                chartRangeMin=0
+                #xAxis = list(ticks = 1:length(ParentIonIntensity),
+                #              labels = seq_along(ParentIonIntensity))
+              ) 
+            ) %>% 
+  formattable::formattable(align = c("l", "r"),
+       value = formattable::formatter(
+        style = formattable::style(
+           display = "inline-block",  
+           `padding-left` = '50px',
+           `padding-right` = '10px'
+        )
+       )
+  ) %>% 
+  formattable::as.htmlwidget() %>% # this step is important
+  spk_add_deps()
+
+
+.sparkline
+
+
+```
+## MS2
+```{r, label='masic-scanstats-sparkline-MS2-total'}
+.sparkline <- scanstats %>% 
+    filter(ScanType==2) %>% 
+    group_by(id) %>%
+    arrange(ScanNumber) %>%
+  summarise(TotalIonIntensity=
+              spk_chr(
+                TotalIonIntensity,
+                width=280,
+                #height=10,
+                chartRangeMin=0
+                #xAxis = list(ticks = 1:length(ParentIonIntensity),
+                #              labels = seq_along(ParentIonIntensity))
+              ) 
+            ) %>% 
+  formattable::formattable(align = c("l", "r"),
+       value = formattable::formatter(
+        style = formattable::style(
+           display = "inline-block",  
+           `padding-left` = '50px',
+           `padding-right` = '10px'
+        )
+       )
+  ) %>% 
+  formattable::as.htmlwidget() %>% # this step is important
+  spk_add_deps()
+
+
+.sparkline
+
+
+```
+
+```{r, label='masic-plotly-plotlen', eval=F}
+#plot(.n, .n+.n*(1-.n/(.n+2)))
+
+#.n <- 1:30
+#.plotlength <- 4 + ( 
+#  .n * ( 1 - .n/(.n + 20)  ) )
+#plot(.n, .plotlength)
+
+
+# .n <-  scanstats %>% pull(id) %>% n_distinct() 
+# .plotlength <- 4 + (  .n * ( 1 - .n/(.n + 20)  ) )
+```
+
+
+## MS - plotly { .tabset }
+```{r, label='masic-scanstats-plotly', eval=T}
+.n <-  scanstats %>% pull(id) %>% n_distinct() 
+.plotlength <- 4 + (  .n * ( 1 - .n/(.n + 20)  ) )
+
+
+# p <- .data %>%
+#   plot_ly(x = ~ScanTime, y = ~TotalIonIntensity, type = "scatter", mode = "lines", color = ~factor(id)) %>%
+#   layout(title = "Interactive Line Chart with Zooming",
+#          xaxis = list(title = "Parent Ion Index"),
+#          yaxis = list(title = "Parent Ion Intensity"),
+#          dragmode = "zoom") # Enable zooming
+# p
+```
+### MS1
+
+```{r label='masic-scanstats-plotly-ms1', fig.width=.plotlength}
+
+.data <- scanstats %>% 
+    filter(ScanType==1) %>% 
+    group_by(id) %>%
+    arrange(ScanNumber)
+p <- ggplot(.data, aes(x = ScanTime, y = TotalIonIntensity, group = id)) +
+  geom_line() +
+  facet_wrap(~ id, ncol = 1) +
+  theme_minimal() +
+  labs(
+    title = "ScanStats MS1 TotalIonIntensity",
+    x = "ScanTime",
+    y = "TotalIonIntensity"
+      )
+
+# Convert the ggplot chart to an interactive plotly chart
+interactive_p <- ggplotly(p)
+
+# Display the interactive chart
+interactive_p
+```
+
+### MS2
+```{r label='masic-scanstats-plotly-ms2', fig.width=.plotlength}
+
+.data <- scanstats %>% 
+    filter(ScanType==2) %>% 
+    group_by(id) %>%
+    arrange(ScanNumber)
+p <- ggplot(.data, aes(x = ScanTime, y = TotalIonIntensity, group = id)) +
+  geom_line() +
+  facet_wrap(~ id, ncol = 1) +
+  theme_minimal() +
+  labs(
+    title = "ScanStats MS2 TotalIonIntensity",
+    #title = " Interactive Line Charts",
+     x = "ScanTime",
+     y = "TotalIonIntensity"
+       )
+
+# Convert the ggplot chart to an interactive plotly chart
+interactive_p <- ggplotly(p)
+
+# Display the interactive chart
+interactive_p
+```
+
+
 ```{r, label='masic-sparkline'}
-cat(colnames(df))
+#cat(colnames(df))
 #.sparkline <- df %>% group_by(id) %>% arrange(ParentIonIndex) %>%  summarise(ParentIonIntensity=spk_chr(ParentIonIntensity, width=600, height=100))
 
 #if (!("ScanType" %in% colnames(df))
 
-.sparkline <- df %>% filter(ScanType==1) %>%  
+#.sparkline <- df %>% filter(ScanType==1) %>%  
+.sparkline <- df %>%  
   group_by(id) %>%
-  arrange(ScanNumber) %>%
-  summarise(TotalIonIntensity=spk_chr(TotalIonIntensity,
-                                      width=280,
-                                      #height=10,
-                                      chartRangeMin=0
-                                      )) %>% 
+  arrange(ParentIonIndex) %>%
+  summarise(ParentIonIntensity=
+              spk_chr(
+                ParentIonIntensity,
+                width=280,
+                #height=10,
+                chartRangeMin=0
+                #xAxis = list(ticks = 1:length(ParentIonIntensity),
+                #              labels = seq_along(ParentIonIntensity))
+              ) 
+            ) %>% 
   formattable::formattable(align = c("l", "r"),
        value = formattable::formatter(
         style = formattable::style(

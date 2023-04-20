@@ -23,7 +23,7 @@ params:
     value:
       tackle: true 
       E2G: false
-      MASIC: true
+      MASIC: false
       denovo: false
   MASIC:
       value:
@@ -35,6 +35,8 @@ params:
         value: 1
   tackle:
     value:
+      ROOTPATH:
+          value: "../.."
       cluster_methods:
           value: [kmeans]
       cluster:

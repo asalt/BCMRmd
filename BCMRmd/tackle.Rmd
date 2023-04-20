@@ -19,7 +19,7 @@ params:
           true
   ROOTPATH: 
     #value: "`normalizePath(dirname('.'))`"
-    value: ".."
+    value: "../.."
     description: supposed to be dynamic
   paramfile:
     value: ""
@@ -134,7 +134,9 @@ create_summary <- function(input) {
 tackle load
 
 ```{r label=tackle.load}
-ROOTPATH <- params$ROOTPATH
+#ROOTPATH <- params$ROOTPATH
+ROOTPATH<- fs::path_abs(params$ROOTPATH)
+
 gct_files <- fs::dir_ls(
   path = ROOTPATH,
   recurse = TRUE,

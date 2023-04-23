@@ -70,6 +70,8 @@ end:
 
 ```{r tackle.setup, include=FALSE}
 suppressPackageStartupMessages(library(tidymodels))
+library(modelsummary)
+
 suppressPackageStartupMessages(library(cmapR))
 suppressPackageStartupMessages(library(magrittr))
 suppressPackageStartupMessages(library(gt))
@@ -193,7 +195,13 @@ make_new_gct <- function(gct, mat) {
 maybe `{.tabset} is a feature we may use later`
 
 ## metadata
-```{r, label='tackle-cdesc', eval=T}
+
+```{r, label='tackle-cdesc-viz', eval=T}
+gct@cdesc %>%
+  select(recno, runno, searchno, label, everything()) %>%
+  modelsummary::datasummary_skim()
+```
+```{r, label='tackle-cdesc-table', eval=T}
 # .gct <- gcts[[1]]
 # .gct@cdesc
 

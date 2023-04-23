@@ -19,3 +19,9 @@ make_new_gct <- function(gct, mat) {
   # make a new gct object with the same metadata as the original
   new("GCT", mat = mat, rid = gct@rid, cid = gct@cid, rdesc = gct@rdesc, cdesc = gct@cdesc, )
 }
+recycle_colors <- function(type = "qual", n = 8) {
+  # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
+  original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
+  recycled_palette <- rep_len(original_palette, length.out = n)
+  return(recycled_palette)
+}

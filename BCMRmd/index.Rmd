@@ -13,106 +13,54 @@ output:
       in_header:
 mainfont: Noto Sans
 params:
-  paramfile:
-    value:
-  ROOTPATH:
-    #value: "`normalizePath(dirname('.'))`"
-    value: "../.."
-    description: supposed to be dynamic
-  routines:
-    value:
-      tackle: true 
-      E2G: false
-      MASIC: true
-      denovo: false
-  MASIC:
-      value:
-        ROOTPATH:
-          value: "../../"
-  E2G:
-    value:
-      ANOTHER:
-        value: 1
-  tackle:
-    value:
-      cluster_methods:
-          value: [kmeans]
-      cluster:
-        value:
-          cluster_rows:
-            value: true
-            description: "cluster the rows"
-          cluster_columns:
-            value: true
-          cluster_row_slices:
-            value: true
-          cluster_col_slices:
-            value: true
-          clustering_distance_rows:
-            value: euclidean
-          clustering_method_rows:
-            value: ward.d2
-          legend_include:
-            value: 
-            description: "metadata variables to include"
-          legend_exclude:
-            value:
-            description: "metadata variables to exclude"
-        pca:
-          value:
-            color:
-              value: "treat"
-            marker:
-              value: "geno"
-            annotate:
-              value: true
-            max_pc:
-              value: 4
-  test:
-    value:
-      a:
-        value: 1
-        type: int
-      b:
-        value: 2
-  logging:
-    value:
-      message: FALSE
-      warning: FALSE
+   paramfile:
+     value: "../BCMRMD_PARAMS.yml"
+  # ROOTPATH:
+  #   #value: "`normalizePath(dirname('.'))`"
+  #   value: ".."
+  #   description: supposed to be dynamic
+  # routines:
+  #   value:
+  #     tackle: false 
+  #     E2G: false
+  #     MASIC: true
+  #     denovo: false
+  #     
+
 ---
 
 # index
-```{r index_setup, include=TRUE}
-suppressPackageStartupMessages(library(cmapR))
-suppressPackageStartupMessages(library(tidyverse))
-suppressPackageStartupMessages(library(ggpubr))
-suppressPackageStartupMessages(library(fs))
-suppressPackageStartupMessages(library(limma))
-suppressPackageStartupMessages(library(kableExtra))
-suppressPackageStartupMessages(library(ComplexHeatmap))
-suppressPackageStartupMessages(library(circlize))
-suppressPackageStartupMessages(library(tidymodels))
-suppressPackageStartupMessages(library(tidymodels))
-suppressPackageStartupMessages(library(tibble))
-suppressPackageStartupMessages(library(magrittr))
-suppressPackageStartupMessages(library(yaml))
+
+
+```{r, label=index-params, debug=T}
+print(params)
+params
+
 ```
 
-load local params
-
 ```{r, label=local-params}
-# print(parmas)
+  # print(parmas)
+#load local params
+
+
+# .f <- "../BCMRmd_PARAMS.yml"
+.f <- params$paramfile
+if (fs::file_exists(.f)) {
+  subparams <- yaml::yaml.load_file(.f)
+  #cat(paste("loading", .f))
+  #params <- modifyList(params, local_params)
+} else{
+  subparams <- params
+}
+
+#Error in eval(expr, envir, enclos) : 
+#  cannot change value of locked binding for 'params'
+
+#print(params)
+#params$tackle$cluster
 knitr::opts_chunk$set(root.dir = normalizePath("."))
 knitr::opts_chunk$set(message = params$logging$message, warning = params$logging$warning)
 knitr::opts_chunk$set(echo = TRUE)
-
-
-.f <- "PARAMS.yaml"
-if (fs::file_exists(.f)) {
-  local_params <- yaml::yaml.load_file(.f)
-  params <- modifyList(params, local_params)
-}
-# print(params)
 ```
 
 
@@ -131,9 +79,24 @@ knitr::knit_hooks$set(debug = function(before, options, envir) {
 ```
 
 
+```{r index_setup, include=TRUE}
+suppressPackageStartupMessages(library(cmapR))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(fs))
+#suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(kableExtra))
+#suppressPackageStartupMessages(library(ComplexHeatmap))
+#suppressPackageStartupMessages(library(circlize))
+#suppressPackageStartupMessages(library(tidymodels))
+suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(yaml))
+```
 
 # MASIC
-```{r, label=index-render-masic, results='hide', eval=params$routines$MASIC, include=params$routines$MASIC}
+```{r, label=index-render-masic, results='hide', eval=subparams$routines$MASIC} 
+
 
 .new_params <- params$MASIC
 .new_params$logging <- params$logging
@@ -150,7 +113,7 @@ rmarkdown::render("MASIC.Rmd",
 
 
 # E2G
-```{r, label=E2G, results='show', eval=params$routines$E2G, include=params$routines$E2G}
+```{r, label=E2G, results='show', eval=subparams$routines$E2G, include=subparams$routines$E2G}
 # print(params$E2G)
 # print(params$E2G$value$ANOTHER)
 .new_params <- params$E2G
@@ -167,7 +130,7 @@ rmarkdown::render("MASIC.Rmd",
 
 
 # tackle
-```{r, label=tackle, results='show', message=params$logging$message, warning=params$logging$warning,   eval=params$routines$tackle}
+```{r, label=tackle, results='show', message=subparams$logging$message, warning=subparams$logging$warning,   eval=subparams$routines$tackle}
 # .params<-params$tackle
 # cat(as.character(params$tackle))
 
@@ -184,6 +147,7 @@ rmarkdown::render("MASIC.Rmd",
 .dirname <- normalizePath(dirname(".out"))
 (.dirname)
 ```
+
 ```{r, label=index-blank123}
 # rint(normalizePath(dirname('.')) )
 # rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)
@@ -203,7 +167,7 @@ rmarkdown::render("MASIC.Rmd",
 ```
 
 LINK
-```{r tackle-link, echo=F, results="asis"}
+```{r tackle-link, echo=F, results="asis", eval=subparams$routines$tackle}
 .out <- fs::path_rel(.out)
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 print(.html)

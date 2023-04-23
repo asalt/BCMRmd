@@ -239,12 +239,92 @@ myplotloadings <- function(.pcaobj, ...) {
 
 ### {-}
 
-## pca.loadings
 
-```{r, label=pca-myplotloadings, fig.width=7, fig.height=7}
 
-.pcaobj %>% myplotloadings(labSize = 3, absolute = T)
+
+## PCA loadings { .tabset }
+## 
+```{r, label=pca-myplotloadings-rel, fig.width=7, fig.height=7}
+  plotloadings(.pcaobj,
+    rangeRetain = 0.01,
+    labSize = 4.0,
+    title = 'Loadings plot',
+    subtitle = 'PC1, PC2, PC3, PC4, PC5',
+    caption = 'Top 1% variables',
+    shape = 24,
+    #col = c('limegreen', 'black', 'red3'),
+    drawConnectors = TRUE)
+#.pcaobj %>% myplotloadings(labSize = 3, absolute = F)
 ```
+
+plotloadings absolute
+```{r, label=pca-myplotloadings-abs, fig.width=7, fig.height=7}
+  plotloadings(.pcaobj,
+    rangeRetain = 0.01,
+    labSize = 4.0,
+    title = 'Loadings plot',
+    subtitle = 'PC1, PC2, PC3, PC4, PC5',
+    caption = 'Top 1% variables',
+    shape = 24,
+    absolute=TRUE,
+    #col = c('limegreen', 'black', 'red3'),
+    drawConnectors = TRUE)
+#.pcaobj %>% myplotloadings(labSize = 3, absolute = F)
+```
+## Loadings one at a time { .tabset }
+
+### PCA1
+```{r label='pca-loading1'}
+# this could be made dynamically
+.component <- 1
+ plotloadings(.pcaobj,
+    components = getComponents(.pcaobj, c(.component)),
+    rangeRetain = 0.05, absolute = TRUE,
+    col = c('black', 'pink', 'red4'),
+    drawConnectors = TRUE, labSize = 4) + coord_flip()
+```
+### PCA2
+```{r label='pca-loading2'}
+# this could be made dynamically
+.component <- 1
+ plotloadings(.pcaobj,
+    components = getComponents(.pcaobj, c(.component)),
+    rangeRetain = 0.05, absolute = TRUE,
+    col = c('black', 'pink', 'red4'),
+    drawConnectors = TRUE, labSize = 4) + coord_flip()
+```
+
+### PCA3
+```{r label='pca-loading3'}
+# this could be made dynamically
+.component <- 1
+ plotloadings(.pcaobj,
+    components = getComponents(.pcaobj, c(.component)),
+    rangeRetain = 0.05, absolute = TRUE,
+    col = c('black', 'pink', 'red4'),
+    drawConnectors = TRUE, labSize = 4) + coord_flip()
+```
+
+## { - }
+
+
+
+```{r, label='pca-misc-loadings'}
+# p <- .pcaobj
+#  plotloadings(p,
+#     components = getComponents(p, c(4,9,3)),
+#     rangeRetain = 0.1,
+#     labSize = 4.0,
+#     absolute = FALSE,
+#     title = 'Loadings plot',
+#     subtitle = 'Misc PCs',
+#     caption = 'Top 10% variables',
+#     shape = 23, shapeSizeRange = c(1, 16),
+#     col = c('white', 'pink'),
+#     drawConnectors = FALSE)
+```
+
+###
 
 
 ```{r label=pca-empty}
@@ -257,5 +337,44 @@ myplotloadings <- function(.pcaobj, ...) {
 #     #"plex"
 #   )
 # )
+```
+ 
+ 
+ 
+```{r, pca-toploadings-heatmap, eval=F, include=F}
+library(ComplexHeatmap)
+.negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate")
+.column_df <- .gct@cdesc %>% select(-any_of(.negsel))
+
+recycle_colors <- function(type = "qual", n = 8) {
+  # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
+  original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
+  recycled_palette <- rep_len(original_palette, length.out = n)
+  return(recycled_palette)
+}
+#
+# .color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
+
+
+.color_list <- .column_df %>%
+  as.list() %>%
+  map(~ recycle_colors(n = length(unique(.))))
+# fix this maybe if better
+for (col in colnames(.column_df)) {
+  # print(col)
+  # names(.color_list[[col]]) <-  unique(.column_df[[col]])
+  names(.color_list[[col]]) <- unique(.column_df[[col]])
+}
+
+
+.top_annotation <- columnAnnotation(
+  df = .column_df %>% as.data.frame(),
+  col = .color_list
+  # col = anno_block(gp = gpar(fill = .color_list$metavar1))
+)
+
+# col = .color_list )
+
+#ComplexHeatmap::Heatmap()
 ```
  

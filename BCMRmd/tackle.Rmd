@@ -11,12 +11,8 @@ output:
 params:
   routines:
     value:
-      cluster:
-        value:
-          false
-      PCA:
-        value:
-          true
+      cluster: false
+      PCA: true
   ROOTPATH: 
     #value: "`normalizePath(dirname('.'))`"
     value: ".."
@@ -284,7 +280,7 @@ render_cluster_report <- function(method = "kmeans") {
 # htmltools::includeHTML("cluster1.html")
 ```
 
-```{r tackle-cluster-report-sep-page, echo=T, results="asis"}
+```{r tackle-cluster-report-sep-page, echo=T, results="asis", eval=params$routines$cluster}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 ## {-}
 ```
@@ -293,7 +289,7 @@ render_cluster_report <- function(method = "kmeans") {
 
 
 render PCA.Rmd
-```{r, label=tackle-pca, message=T, warning=T, results='show', eval=T}
+```{r, label=tackle-pca, message=T, warning=T, results='show', eval=params$routines$pca}
 
 .params <- params$pca
 

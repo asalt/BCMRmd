@@ -26,7 +26,24 @@ params:
   #     MASIC: true
   #     denovo: false
   #     
-
+  # ROOTPATH:
+  #   #value: "`normalizePath(dirname('.'))`"
+  #   value: "../.."
+  #   description: supposed to be dynamic
+  # routines:
+  #   value:
+  #     tackle: true 
+  #     E2G: false
+  #     MASIC: false
+  #     denovo: false
+  # MASIC:
+  #     value:
+  #       ROOTPATH:
+  #         value: "../../"
+  # logging:
+  #   value:
+  #     message: FALSE
+  #     warning: FALSE
 ---
 
 # index

@@ -49,15 +49,16 @@ if (!exists("gct")) {
   .mat <- matrix(runif(1000), nrow = 100, ncol = 10)
   .rids <- seq(1, dim(.mat)[1]) %>% as.character()
   .cids <- seq(1, dim(.mat)[2]) %>% as.character()
-  .rdesc <- tibble::tibble(
+  .rdesc <- data.frame(
     rdesc=.cids,
+    id = .rids
   )
   .cdesc <- tibble::tibble(
     id = .cids,
     metavar1 = sample(letters[1:5], 10, replace = T) %>% as.factor(),
     metavar2 = sample(letters[1:5], 10, replace = T) %>% as.factor(),
   )
-  gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc = .cdesc)
+  gct <- cmapR::GCT(mat = .mat, rid = .rids, cid = .cids, cdesc = .cdesc, rdesc = .rdesc)
   # gct = new(cmgct)
 } else {
   # If 'gct' exists, just use the existing one

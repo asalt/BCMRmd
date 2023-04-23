@@ -1,0 +1,107 @@
+---
+title: "ORA"
+author: "BCM MSPC"
+date: "`r Sys.Date()`"
+tidy: formatR
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+    includes:
+      #in_header: header.html 
+params:
+  method:
+    value: pam # kmeans, pam
+    options: [kmeans, pam, banditpam] # banditpam not yet
+  cluster_rows:
+    value: true
+  cluster_columns:
+    value: true
+  cluster_row_slices:
+    value: true
+  cluster_col_slices:
+    value: true
+  clustering_distance_rows:
+    value: euclidean
+  clustering_method_rows:
+    value: ward.d2
+  legend_include:
+    value: 
+  legend_exclude:
+    value:
+  cluster_test_range:
+    value: [2, 12]
+  logging:
+    value:
+        message: TRUE
+        warning: TRUE
+  
+
+end: 1
+
+---
+
+
+```{r, label=cluster-load, include=F}
+library(ggplot2)
+library(cmapR)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(broom)
+library(magrittr)
+library(scales)
+source("funcs.R")
+knitr::opts_chunk$set(
+  message = params$logging$message,
+  warning = params$logging$warning
+)
+
+knitr::opts_chunk$set(echo = TRUE)
+source("funcs.R")
+```
+
+
+```{r, ora-gct-check}
+
+if (!exists("gct")) {
+  gct <- .GlobalEnv$random_gct()
+}
+```
+
+```{r, ora-load}
+library(WebGestaltR)
+```
+
+```{r, ora-ora-go}
+
+#interesting_collection_of_genes <- gct@rid %>% ``
+
+.immune_signature_gids <- c(
+  "920",
+  "925",
+  "3458",
+  "3558",
+  "7124"
+  )
+geneset <- .immune_signature_gids
+
+.organism = "hsapiens"
+.enrichDatabase = "geneontology_Biological_Process_noRedundant"
+.enrichMethod = "ORA"
+.referenceSet <- "genome_protein-coding"
+WebGestaltR::listReferenceSet()
+
+  
+.res <- WebGestaltR::WebGestaltR(
+  interestGene = .immune_signature_gids ,
+  interestGeneType = "entrezgene",
+  organism = .organism,
+  enrichDatabase = .enrichDatabase,
+  enrichMethod = .enrichMethod,
+  referenceSet = .referenceSet
+)
+
+```
+

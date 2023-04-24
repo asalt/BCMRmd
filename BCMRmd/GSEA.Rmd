@@ -18,10 +18,25 @@ params:
   comparisons:
     value:
       - name: "pdx_vs_src"
-        formula: "SampleType=='pdx' - SampleType == 'src'"
+        contrast_column: SampleType
+        group_1_value: "pdx"
+        group_2_value: "src"
         subsets:
-          - Model_TNBC: "PDXModel == 'TNBC'"
-          - Model_HER2: "'HER2' %in% PDXModel"
+          - name: "Model_TNBC"
+            filter_expression: "PDXModel == 'TNBC'"
+          - name: "Model_HER2+"
+            filter_expression: "'HER2' %in% PDXModel"
+          # - Model_TNBC: "PDXModel == 'TNBC'"
+          # - Model_HER2: "'HER2' %in% PDXModel"
+      # - name: "test"
+      - name: "something_else"
+        contrast_column: SampleType
+        group_1_value: "pdx"
+        group_2_value: "src"
+  gct_file:
+    value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct"
+    description: if specified, will use this gct file
+          
   group1:
     value: group1
   group2:
@@ -141,7 +156,12 @@ source("funcs.R") # make_random_gct
 
 ```{r, ora-gct-check}
 
-params <- read_rmd_params("GSEA.Rmd")
+.params <- read_rmd_params("GSEA.Rmd")
+#.gct_file <- params$gct_file[['value']]
+.gct_file <- params$gct_file
+if (!is.null(.gct_file)){
+  gct <- cmapR::parse_gctx(.gct_file)
+}
 
 .group1 <- params$group1
 .group2 <- params$group2
@@ -160,7 +180,62 @@ library(WebGestaltR)
 
 
 ```{r, label=gsea-one-comparison-func}
-.comparison <- params$comparisons[[1]]
+( .comparisons <- .params$comparisons$value )
+( .comparison <- .comparisons[[1]])
+( .comparison$name )
+( .comparison$subsets )
+
+
+( .comparison$subsets[[1]] )
+( .comparison$subsets[[2]] )
+
+( .comparison <- .comparisons[[1]])
+#( .comparison <- .comparisons[[1]]$value)
+.comparison$name
+.comparison$contrast_column
+.comparison$group_1_value
+.comparison$group_2_value
+.comparison$subsets
+(.comparison[[1]]$name )
+(.comparison[[1]]$name )
+(.comparison[[1]]$subsets )
+
+( .comparison$)
+
+( .comparisons[[1]]$subset )
+( .subsets <- .comparison$subsets )
+( .comparison_formula <- .comparison$formula )
+( .subset <- .subsets[[1]] )
+ 
+
+(  .subset_expression <- parse(text = .subset) )
+( .contrast_vector <- .comparison_formula %>% parse(text = .) )
+
+.metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+(.updated_comparison_formula <- paste0("filtered_metadata$", .comparison$formula))
+(.contrast_vector_values <- eval(parse(text = .updated_comparison_formula)) )
+
+
+
+
+run_gsea_on_subset <- function(.subset){
+  ( .subset_name <- names(.subset) )
+  ( .subset_expression <- parse(text = .subset[[1]]) )
+  ( .subset_expression <- parse(text = .subset[1]) )
+  ( .subset_expression <- parse(text = .subset) )
+  .filtered_metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+
+  .subset_expression <- parse(text = .subset)
+  ...
+}
+#.subsets %>% purrr::map()
+
+for (.subset %in% .subsets){
+  print(.subset)
+}
+
+
+subsets <- .comparison[1]
 
 .subset <- subsets[[1]]
 .subset
@@ -179,7 +254,7 @@ comp_name <- .comparison$name
 
 ```
 
-```{r, gsea-ora-go}
+```{r, gsea-gsea-go, eval=F}
 
 #interesting_collection_of_genes <- gct@rid %>% ``
 .group1 <- params$group1

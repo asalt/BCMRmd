@@ -13,6 +13,11 @@ params:
     value:
       cluster: false
       PCA: true
+      volcano: false
+      GSEA: true
+  gct_file:
+    value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct"
+    description: if specified, will use this gct file
   ROOTPATH: 
     #value: "`normalizePath(dirname('.'))`"
     value: "../.."
@@ -135,22 +140,29 @@ tackle load
 #ROOTPATH <- params$ROOTPATH
 ROOTPATH<- fs::path_abs(params$ROOTPATH)
 
-gct_files <- fs::dir_ls(
-  path = ROOTPATH,
-  recurse = TRUE,
-  regexp = ".gct"
-)
-stringr::str_c("Found", gct_files) %>% cat()
-# ( gct_files )
 
-gcts <- gct_files %>%
-  purrr::map(
-    # ~cmapR::parse_gctx()
-    ~ cmapR::parse_gctx(.x) # , rid=1:100)
+if (!is.null(params$gct_file)){
+  
+  gct <- cmapR::parse_gctx(params$gct_file)
+  
+} else {
+
+  gct_files <- fs::dir_ls(
+    path = ROOTPATH,
+    recurse = TRUE,
+    regexp = ".gct"
   )
-gct <- gcts[[1]]
+  stringr::str_c("Found", gct_files) %>% cat()
+  # ( gct_files )
+  
+  gcts <- gct_files %>%
+    purrr::map(
+      # ~cmapR::parse_gctx()
+      ~ cmapR::parse_gctx(.x) # , rid=1:100)
+    )
+  gct <- gcts[[1]]
 
-
+}
 metadata <- gct@cdesc %>% as.data.frame() # no tibbles allowed
 # DEBUGING
 
@@ -228,13 +240,6 @@ gct@cdesc %>%
 
 
 ## metrics
-```{r, label="tackle-metrics"}
-gcts %>% map(
-  ~ cmapR::mat(.) %>% dim()
-)
-gct <- gcts[[1]]
-# all below analysis is written to analyze 1 gct object
-```
 
 ## cluster
 
@@ -344,6 +349,13 @@ next
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 ## {-}
 ```
+
+
+## GSEA
+
+```{r tackle-gsea-render}
+
+``` 
 
 ## YFG
 

@@ -1,0 +1,195 @@
+ROOTPATH:
+  #value: "`normalizePath(dirname('.'))`"
+  value: ".."
+  description: supposed to be dynamic
+routines:
+  tackle: TRUE
+  E2G: FALSE
+  MASIC: TRUE
+  denovo: FALSE
+MASIC:
+    value:
+      ROOTPATH:
+        value: "../"
+E2G:
+  value:
+    ANOTHER:
+      value: 1
+tackle:
+  routines:
+    cluster: FALSE
+    pca: TRUE
+    volcano: FALSE
+    GSEA: TRUE
+  #description: "tackle on e2g to make gene level summaries"
+  #value:
+  ROOTPATH:
+    value: "../"
+  gct_file:
+    value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct
+"
+    description: if specified, will use this gct file
+  pca:
+    value:
+      color:
+        value: "treat"
+      marker:
+        value: "geno"
+      annotate:
+        value: true
+      max_pc:
+        value: 4
+  cluster:
+    value:
+      cluster_methods:
+          value: [kmeans]
+      cluster_rows:
+        value: true
+        description: "cluster the rows"
+      cluster_columns:
+        value: true
+      cluster_row_slices:
+        value: true
+      cluster_col_slices:
+        value: true
+      clustering_distance_rows:
+        value: euclidean
+      clustering_method_rows:
+        value: ward.d2
+      legend_include:
+        value:
+        description: "metadata variables to include"
+      legend_exclude:
+        value:
+        description: "metadata variables to exclude"
+  volcano:
+    value:
+      bg_marker_color:
+        value:
+        description: "rgb(a) for background marker color"
+      foldchange:
+        value: 4
+        description: "fold change cutoff"
+      expression_data:
+        value: false
+        description: "Include expression data for each sample in tabular output"
+      annot_scale:
+        value: 1.0
+      number:
+        value: 35
+        description: "Maximum number of significant genes to highlight (annotate) in plot"
+      number_by:
+        value: log2_FC
+        description: "How to determine the top n genes to label on plot"
+      only_sig:
+        value: false
+        description: "Only export genes that are significantly different (based on set cutoff)"
+      label_scale:
+        value: 1.5
+        description: "To what extent to scale the labels"
+      scale:
+        value: 1.5
+      marker_scale:
+        value: 1.4
+      sig:
+        value: 0.05
+        description: "Significance cutoff for (B.H. adjusted) pvalue"
+      sig_metric:
+        value: pAdj
+        description: "Whether to use pValue or B.H. pAdj value for gene highlighting cutoff"
+        choices: [pAdj, pvalue]
+      p_value:
+        value: true
+        description: "Whether to plot padj or pvalue on volcano plot (does not change underlying data)"
+      highlight_geneids:
+        value:
+        description: "Optional list of geneids to also highlight. Should have 1 geneid per line."
+      force_highlight_geneids:
+        value: false
+        description: "Plot all genes specified in `--highlight-geneids` regardless of significance value"
+  gsea:
+    value:
+      metadata_columns:
+        value: Sample
+      comparisons:
+        value:
+          - c("genotype_WT_vs_KO", "genotype == 'WT' - genotype == 'KO'")
+      group1:
+        value: ctrl
+      group2:
+        value: treat
+      show_result:
+        value: true
+        description: "Display the results, like showing your vacation photos to your friends who didn't go!"
+      collapse:
+        value: false
+        description: "Collapse? What is this, a bad stock market? We're talking genesets here!"
+      gmt:
+        value:
+        description: "GMT, you think it's Greenwich Mean Time? No, it's custom genesets for you, my friend!"
+      only_human:
+        value: false
+        description: "Only humans? This isn't an exclusive club, we're including everybody's genes!"
+      use_cluster2:
+        value: false
+        description: "Cluster2? Is that the new hot spot in town? No, it's another way to analyze gene sets!"
+      geneset:
+        value: hallmark
+        description: "Choose your geneset like picking a wine at a fancy dinner party!"
+      metric:
+        value: Signal2Noise
+        description: "Metrics, it's like how we rate movies, but for genes and pathways!"
+      mode:
+        value: Max_probe
+        description: "Mode? Sounds like a fashion trend, but it's about gene expression data!"
+      norm:
+        value: meandiv
+        description: "Normalize, like when you're trying to act cool in front of your in-laws!"
+      number_of_permutations:
+        value: 1000
+        description: "Permutations, it's like all the different ways your GPS can take you home!"
+      permute:
+        value: phenotype
+        description: "Permute, it's like rearranging the furniture, but for gene_sets or phenotype!"
+      plot_top_x:
+        value: 10
+        description: "Like the top 10 movies of the year, but it's for enrichment plots!"
+      rnd_type:
+        value: no_balance
+        description: "RND type, like deciding which side of the bed to sleep on!"
+      rnd_seed:
+        value: 1234
+        description: "Random seed, it's like picking lottery numbers, but for your analysis!"
+      scoring_scheme:
+        value: weighted
+        description: "Scoring scheme, like how you pick your friends... or enemies!"
+      set_max:
+        value: 500
+        description: "Set max, like the biggest party you can imagine, but for genesets!"
+      set_min:
+        value: 15
+        description: "Set min, it's like a small gathering for your closest genesets!"
+      sort:
+        value: real
+        description: "Sorting, like choosing the order of your favorite TV shows on Netflix!"
+      number:
+        value: 9999
+        description: "Number of pathways to plot, like counting how many cups of coffee you've had today!"
+      group:
+        value:
+        description: "Specify the group for GSEA, like picking which table you want to sit at during a wedding!"
+      plot_genes:
+        value: false
+        description: "Plotting genes, like planning your next big vacation!"
+      plot_genes_sig:
+        value: false
+        description: "Plot significant genes, like the VIPs of the gene world!"
+      annotate:
+        value:
+        description: "Annotate, like writing snarky comments on your friend's Facebook posts!"
+      no_homologene_remap:
+        value: false
+logging:
+  value:
+    message: TRUE
+    warning: TRUE

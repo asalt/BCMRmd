@@ -1,5 +1,5 @@
 ---
-title: "ORA"
+title: "GSEA"
 author: "BCM MSPC"
 date: "`r Sys.Date()`"
 tidy: formatR
@@ -10,7 +10,22 @@ output:
     toc: yes
     includes:
       #in_header: header.html 
+  # formula:
+  #   value: ~ SampleType + PDXModel
+  #metadata_columns:
+  #  value: SampleType, OrganSite
 params:
+  comparisons:
+    value:
+      - name: "pdx_vs_src"
+        formula: "SampleType=='pdx' - SampleType == 'src'"
+        subsets:
+          - Model_TNBC: "PDXModel == 'TNBC'"
+          - Model_HER2: "'HER2' %in% PDXModel"
+  group1:
+    value: group1
+  group2:
+    value: group2
   cache_dir:
     value: "./WebGestaltR_cache"
   fdr_method:
@@ -113,43 +128,68 @@ library(purrr)
 library(broom)
 library(magrittr)
 library(scales)
-source("funcs.R")
+library(limma)
 knitr::opts_chunk$set(
   message = params$logging$message,
   warning = params$logging$warning
 )
 
 knitr::opts_chunk$set(echo = TRUE)
-source("funcs.R")
+source("funcs.R") # make_random_gct 
 ```
 
 
 ```{r, ora-gct-check}
 
+params <- read_rmd_params("GSEA.Rmd")
+
+.group1 <- params$group1
+.group2 <- params$group2
 if (!exists("gct")) {
-  gct <- .GlobalEnv$random_gct()
+  gct <- .GlobalEnv$make_random_gct()
 }
 ```
 
 ```{r, ora-load}
 library(WebGestaltR)
+
+.meta <- gct@cdesc
+  
+  
 ```
 
-```{r, ora-ora-go}
+
+```{r, label=gsea-one-comparison-func}
+.comparison <- params$comparisons[[1]]
+
+.subset <- subsets[[1]]
+.subset
+.subset_expression <- parse(text = .subset)
+
+gct@cdesc %>% filter(eval(.subset_expression))
+
+comp_name <- .comparison$name
+  comp_formula <- .comparison$formula
+  subsets <- .comparison$subsets
+  
+  contrast_vector <- eval(parse(text = comp_formula))
+    gsea_result <- gsea_function(data, contrast_vector) # Replace with the appropriate GSEA function
+    results[[comp_name]] <- gsea_result
+
+
+```
+
+```{r, gsea-ora-go}
 
 #interesting_collection_of_genes <- gct@rid %>% ``
+.group1 <- params$group1
+.group2 <- params$group2
 
-.immune_signature_gids <- c(
-  "920",
-  "925",
-  "3458",
-  "3558",
-  "7124"
-  )
 
 .organism = "hsapiens"
 .enrichDatabase = "geneontology_Biological_Process_noRedundant"
-.enrichMethod = "ORA"
+.enrichMethod = "GSEA"
+# enrichmethod == GSEA means interestGene data.frame with two columns, geneids and scores
 .referenceSet <- "genome_protein-coding"
 .isOutput <- TRUE # false only returns a dataframe with the enrichment results, useful for analyzing many combinations of interesting genes
 .outputDirectory <- params$output_dir
@@ -163,7 +203,7 @@ library(WebGestaltR)
 
 interesting_genes <- .immune_signature_gids
 #.isOutput=F
-.project_name <- "ORA-test-immune"
+.project_name <- "GSEA-test-immune"
 
 .res <- WebGestaltR::WebGestaltR(
   enrichMethod = .enrichMethod,
@@ -198,4 +238,3 @@ interesting_genes <- .immune_signature_gids
 #  
 #)
 ```
-

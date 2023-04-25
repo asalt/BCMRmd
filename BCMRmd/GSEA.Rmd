@@ -25,8 +25,8 @@ params:
         subsets:
           - name: "Model_TNBC"
             filter_expression: "PDXModel == 'TNBC'"
-          - name: "Model_HER2+"
-            filter_expression: "'HER2' %in% PDXModel"
+          - name: "Model_HER2"
+            filter_expression: "stringr::str_detect('HER2', PDXModel)"
           # - Model_TNBC: "PDXModel == 'TNBC'"
           # - Model_HER2: "'HER2' %in% PDXModel"
       # - name: "test"
@@ -148,22 +148,24 @@ knitr::opts_chunk$set(
   warning = params$logging$warning
 )
 
+.DRYRUN <- F
+
 knitr::opts_chunk$set(echo = TRUE)
-source("funcs.R") # make_random_gct 
+source("funcs.R") # make_random_gct
 ```
 
 
 ```{r, ora-gct-check}
 
 .params <- read_rmd_params("GSEA.Rmd")
-#.gct_file <- params$gct_file[['value']]
+# .gct_file <- params$gct_file[['value']]
 .gct_file <- .params$gct_file$value
-if (!is.null(.gct_file)){
+if (!is.null(.gct_file)) {
   gct <- cmapR::parse_gctx(.gct_file)
 }
 
-#.group1 <- params$group1
-#.group2 <- params$group2
+# .group1 <- params$group1
+# .group2 <- params$group2
 if (!exists("gct")) {
   gct <- .GlobalEnv$make_random_gct()
 }
@@ -172,194 +174,204 @@ if (!exists("gct")) {
 ```{r, ora-load}
 library(WebGestaltR)
 
-.organism = "hsapiens"
-.enrichDatabase = "geneontology_Biological_Process_noRedundant"
-.enrichMethod = "GSEA"
+.organism <- "hsapiens"
+.enrichDatabase <- "geneontology_Biological_Process_noRedundant"
+.enrichMethod <- "GSEA"
 # enrichmethod == GSEA means interestGene data.frame with two columns, geneids and scores
 .referenceSet <- "genome_protein-coding"
 .isOutput <- TRUE # false only returns a dataframe with the enrichment results, useful for analyzing many combinations of interesting genes
 # .outputDirectory <- params$output_dir
 .projectName <- params$project_name
-#WebGestaltR::listReferenceSet()
+# WebGestaltR::listReferenceSet()
 .nThreads <- 1
 .output_dir <- .params$output_dir
 .output_dir <- "./WebGestaltR_GSEA/"
 
 .cache_dir <- params$cache_dir
-.cache_dir <- "./WebGestaltR_cache"  
-  
+.cache_dir <- "./WebGestaltR_cache"
+
 .n_perm <- 10
-  
 ```
+
 ```{r, label='gsea-funcs'}
 
 signal2noise <- function(expression_matrix, group1, group2) {
-  expression_matrix <- .mat
-  group1 <- .grp1_samples
-  group2 <- .grp2_samples
-  
+  # expression_matrix <- .mat
+  # group1 <- .grp1_samples
+  # group2 <- .grp2_samples
+
   group1_expression <- expression_matrix[, group1]
   group2_expression <- expression_matrix[, group2]
-  
+
   # group1_means <- colMeans(group1_expression)
   # group2_means <- colMeans(group2_expression)
-  
+
   group1_means <- apply(group1_expression, 1, mean)
   group2_means <- apply(group2_expression, 1, mean)
-  
+
   group1_var <- apply(group1_expression, 1, var)
   group2_var <- apply(group2_expression, 1, var)
-  
+
   s2n <- (group1_means - group2_means) / (group1_var + group2_var)
   return(s2n)
 }
+```
+
+```{r, label=gsea-func2}
 
 
-.func2 <- function(.a_subset, .comparison){
-  
-  
-    ( .subsets <- .comparison$subsets )
+.func2 <- function(.a_subset, .comparison) {
+  (.subsets <- .comparison$subsets)
   # list with name and filter_expression
   # .a_subset <- .subsets[[1]]
   .subname <- .a_subset$name
-  ( .name <- .comparison$name )
-  ( .contrast_col <- .comparison$contrast_column )
+  (.name <- .comparison$name)
+  (.contrast_col <- .comparison$contrast_column)
   .filter_expression <- .a_subset$filter_expression
   # .filter_expression <- "all()"
-  ( .subset_expression <- parse(text = .filter_expression ) )
-  .metadata <- gct@cdesc %>% filter(eval(.subset_expression)) 
-  
+  (.subset_expression <- parse(text = .filter_expression))
+  .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+  if (dim(.metadata)[1] == 0){
+    cat("no metadata remaining after subset selection")
+    
+  }
+
   .grp1 <- .comparison$group_1_value
   .grp2 <- .comparison$group_2_value
-  .grp1_samples <- .metadata[ .metadata[.contrast_col] == .grp1, "id" ]
-  .grp2_samples <- .metadata[ .metadata[.contrast_col] == .grp2, "id" ]
-  .mat <- mat(gct) 
-  #.mat[ ,.grp1_samples ]
-  .s2n_res  <- .GlobalEnv$signal2noise(.mat, .grp1_samples, .grp2_samples) 
-  .s2n_table <- tibble(GeneID = names(.s2n_res), Value = .s2n_res)
-  
-  if (!fs::dir_exists(.output_dir)){
+  .grp1_samples <- .metadata[.metadata[.contrast_col] == .grp1, "id"]
+  .grp2_samples <- .metadata[.metadata[.contrast_col] == .grp2, "id"]
+  .mat <- mat(gct)
+  # .mat[ ,.grp1_samples ]
+  .s2n_res <- .GlobalEnv$signal2noise(.mat, .grp1_samples, .grp2_samples)
+  .s2n_table <- tibble(geneid = names(.s2n_res), value = .s2n_res)
+
+  if (!fs::dir_exists(.output_dir)) {
     fs::dir_create(.output_dir)
   }
-  #.OUTPUT_DIR <- "."
-  # .project_name <- paste0(.name, "_", .subname) 
+  # .OUTPUT_DIR <- "."
+  # .project_name <- paste0(.name, "_", .subname)
   .project_name <- paste0(.name, "_", .subname) %>% gsub("_$", "", .) # get rid of extra
   .resultant_project_dir <- file.path(.output_dir, paste0("Project_", .project_name))
-  ( .resultant_project_dir )
+  (.resultant_project_dir)
   
-  if (fs::dir_exists(.resultant_project_dir)){
-    cat(paste(.resultant_project_dir, "already exists\n", "Skipping"))
-    return
+  cat(fs::dir_exists(.resultant_project_dir))
+  if (fs::dir_exists(.resultant_project_dir)) {
+    cat(paste(.resultant_project_dir, "already exists\n", "Skipping\n"))
+    return()
   }
-  #.project_name <- "GSEA-test-immune"
+  # .project_name <- "GSEA-test-immune"
   # else run
 
- cat(paste("running gsea", "outdir", .resultant_project_dir, '\n'))
+  cat(paste("running gsea", "outdir", .resultant_project_dir, "\n"))
+  
+  if (.DRYRUN == TRUE){
+    cat("Dryrun, not running\n")
+    return()
+  }
 
-  # .res <- WebGestaltR::WebGestaltR(
-  #   #  enrichMethod = .enrichMethod,
-  #   enrichMethod = "GSEA",
-  #   interestGene = .s2n_table,
-  #   interestGeneType = "entrezgene",
-  #   perNum = .n_perm,
-  #   organism = .organism,
-  #   enrichDatabase = .enrichDatabase,
-  #   referenceSet = .referenceSet,
-  #   isOutput = .isOutput,
-  #   nThreads = .nThreads,
-  #   cache = .cache_dir,
-  #   projectName = .project_name,
-  #   outputDirectory = .output_dir
-  # )
-  # .res # data frame with geneSet, description, link, ES, NES, pValue, ..
+  .res <- WebGestaltR::WebGestaltR(
+    #  enrichMethod = .enrichMethod,
+    enrichMethod = "GSEA",
+    interestGene = .s2n_table,
+    interestGeneType = "entrezgene",
+    perNum = .n_perm,
+    organism = .organism,
+    enrichDatabase = .enrichDatabase,
+    referenceSet = .referenceSet,
+    isOutput = .isOutput,
+    nThreads = .nThreads,
+    cache = .cache_dir,
+    projectName = .project_name,
+    outputDirectory = .output_dir
+  )
+  .res # data frame with geneSet, description, link, ES, NES, pValue, ..
 }
 
-  
-.func1 <- function(.comparison){
-  
-  
+
+.func1 <- function(.comparison) {
+
+
   # .compariso
-   # .comparison <- .comparisons$value[[1]]
-    ( .name <- .comparison$name )
-    ( .contrast_col <- .comparison$contrast_column )
-    ( .subsets <- .comparison$subsets )
-    if (is.null(.subsets)){
-      .subsets <- list(  # a list with just 1 subset comparison, which is everything
-        list(name='', filter_expression="all()")
-      )
-    }
-    #.a_subset <- .subsets[[1]]
-    # filter down based on
+  # .comparison <- .comparisons$value[[1]]
+  (.name <- .comparison$name)
+  (.contrast_col <- .comparison$contrast_column)
+  (.subsets <- .comparison$subsets)
+  if (is.null(.subsets)) {
+    .subsets <- list( # a list with just 1 subset comparison, which is everything
+      list(name = "", filter_expression = "all()")
+    )
+  }
+  # .a_subset <- .subsets[[1]]
+  # filter down based on
   # browser()
   .gesa_results <- .subsets %>% map(.func2, .comparison)
-    #.gsea_results
+  # .gsea_results
 }
 
-#.metadata <- gct@cdesc %>% filter(eval(.subset_expression))
-#( .comparisons <- .params$comparisons )
-.comparisons$value %>%  purrr::map(.func1)
-#.comparisons$value %>%  purrr::map(.func1)
+# .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+( .comparisons <- .params$comparisons )
+.comparisons$value %>% purrr::map(.func1)
+# .comparisons$value %>%  purrr::map(.func1)
 
 
 # ( .comparisons <- .params$comparisons )
 # ( .comparison <- .comparisons$value[[2]])
-#.comparisons$value %>%  purrr::map(.func)
+# .comparisons$value %>%  purrr::map(.func)
 ```
 
 ```{r, label=gsea-one-comparison-loading-testing, eval=F}
-( .comparisons <- .params$comparisons$value )
-( .comparison <- .comparisons[[1]])
-( .comparison$name )
-( .comparison$subsets )
+(.comparisons <- .params$comparisons$value)
+(.comparison <- .comparisons[[1]])
+(.comparison$name)
+(.comparison$subsets)
 
 
-( .comparison$subsets[[1]] )
-( .comparison$subsets[[2]] )
+(.comparison$subsets[[1]])
+(.comparison$subsets[[2]])
 
-( .comparison <- .comparisons[[1]])
-#( .comparison <- .comparisons[[1]]$value)
+(.comparison <- .comparisons[[1]])
+# ( .comparison <- .comparisons[[1]]$value)
 .comparison$name
 .comparison$contrast_column
 .comparison$group_1_value
 .comparison$group_2_value
 .comparison$subsets
-(.comparison[[1]]$name )
-(.comparison[[1]]$name )
-(.comparison[[1]]$subsets )
+(.comparison[[1]]$name)
+(.comparison[[1]]$name)
+(.comparison[[1]]$subsets)
 
-( .comparison$)
 
-( .comparisons[[1]]$subset )
-( .subsets <- .comparison$subsets )
-#( .comparison_formula <- .comparison$formula )
-( .subset <- .subsets[[1]] )
- 
+(.comparisons[[1]]$subset)
+(.subsets <- .comparison$subsets)
+# ( .comparison_formula <- .comparison$formula )
+(.subset <- .subsets[[1]])
 
-( .contrast_vector <- .comparison_formula %>% parse(text = .) )
-(  .subset_expression <- parse(text = .subset) )
+
+(.contrast_vector <- .comparison_formula %>% parse(text = .))
+(.subset_expression <- parse(text = .subset))
 
 .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
 (.updated_comparison_formula <- paste0("filtered_metadata$", .comparison$formula))
-(.contrast_vector_values <- eval(parse(text = .updated_comparison_formula)) )
+(.contrast_vector_values <- eval(parse(text = .updated_comparison_formula)))
 
 
 
 
-run_gsea_on_subset <- function(.subset){
-  ( .subset_name <- names(.subset) )
-  ( .subset_expression <- parse(text = .subset[[1]]) )
-  ( .subset_expression <- parse(text = .subset[1]) )
-  ( .subset_expression <- parse(text = .subset) )
+run_gsea_on_subset <- function(.subset) {
+  (.subset_name <- names(.subset))
+  (.subset_expression <- parse(text = .subset[[1]]))
+  (.subset_expression <- parse(text = .subset[1]))
+  (.subset_expression <- parse(text = .subset))
   .filtered_metadata <- gct@cdesc %>% filter(eval(.subset_expression))
 
   .subset_expression <- parse(text = .subset)
   ...
 }
-#.subsets %>% purrr::map()
+# .subsets %>% purrr::map()
 
-for (.subset %in% .subsets){
-  print(.subset)
-}
+# for (.subset %in% .subsets){
+#   print(.subset)
+# }
 
 
 subsets <- .comparison[1]
@@ -371,40 +383,38 @@ subsets <- .comparison[1]
 gct@cdesc %>% filter(eval(.subset_expression))
 
 comp_name <- .comparison$name
-  comp_formula <- .comparison$formula
-  subsets <- .comparison$subsets
-  
-  contrast_vector <- eval(parse(text = comp_formula))
-    gsea_result <- gsea_function(data, contrast_vector) # Replace with the appropriate GSEA function
-    results[[comp_name]] <- gsea_result
+comp_formula <- .comparison$formula
+subsets <- .comparison$subsets
 
-
+contrast_vector <- eval(parse(text = comp_formula))
+gsea_result <- gsea_function(data, contrast_vector) # Replace with the appropriate GSEA function
+results[[comp_name]] <- gsea_result
 ```
 
 ```{r, gsea-gsea-go, eval=F}
 
-#interesting_collection_of_genes <- gct@rid %>% ``
+# interesting_collection_of_genes <- gct@rid %>% ``
 .group1 <- params$group1
 .group2 <- params$group2
 
 
-.organism = "hsapiens"
-.enrichDatabase = "geneontology_Biological_Process_noRedundant"
-.enrichMethod = "GSEA"
+.organism <- "hsapiens"
+.enrichDatabase <- "geneontology_Biological_Process_noRedundant"
+.enrichMethod <- "GSEA"
 # enrichmethod == GSEA means interestGene data.frame with two columns, geneids and scores
 .referenceSet <- "genome_protein-coding"
 .isOutput <- TRUE # false only returns a dataframe with the enrichment results, useful for analyzing many combinations of interesting genes
-#.outputDirectory <- params$output_dir
+# .outputDirectory <- params$output_dir
 .projectName <- params$project_name
-#WebGestaltR::listReferenceSet()
+# WebGestaltR::listReferenceSet()
 .nThreads <- 4
 
 .cache_dir <- params$cache_dir
-.cache_dir <- "./WebGestaltR_cache"  
+.cache_dir <- "./WebGestaltR_cache"
 
 
 interesting_genes <- .immune_signature_gids
-#.isOutput=F
+# .isOutput=F
 .project_name <- "GSEA-test-immune"
 
 .res <- WebGestaltR::WebGestaltR(
@@ -418,12 +428,11 @@ interesting_genes <- .immune_signature_gids
   nThreads = .nThreads,
   cache = .cache_dir,
   projectName = .project_name
-  
 )
 
 
 # if we want to do any steps "manually" we can build that later
-#install.packages("biomaRt")
+# install.packages("biomaRt")
 # library(biomaRt)
 # ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 # protein_coding_genes <- getBM(
@@ -434,9 +443,9 @@ interesting_genes <- .immune_signature_gids
 # )
 
 
-#.oraenrich <- WebGestaltR:::oraEnrichment(
+# .oraenrich <- WebGestaltR:::oraEnrichment(
 #  interestGene = .immune_signature_gids,
 #  referenceGene =
-#  
-#)
+#
+# )
 ```

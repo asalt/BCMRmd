@@ -16,6 +16,7 @@ output:
   #  value: SampleType, OrganSite
 params:
   comparisons:
+    description: description
     value:
       - name: "pdx_vs_src"
         contrast_column: SampleType
@@ -37,10 +38,8 @@ params:
     value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct"
     description: if specified, will use this gct file
           
-  group1:
-    value: group1
-  group2:
-    value: group2
+  output_dir: 
+    value: "WebGestaltR_GSEA"
   cache_dir:
     value: "./WebGestaltR_cache"
   fdr_method:
@@ -158,13 +157,13 @@ source("funcs.R") # make_random_gct
 
 .params <- read_rmd_params("GSEA.Rmd")
 #.gct_file <- params$gct_file[['value']]
-.gct_file <- params$gct_file
+.gct_file <- .params$gct_file$value
 if (!is.null(.gct_file)){
   gct <- cmapR::parse_gctx(.gct_file)
 }
 
-.group1 <- params$group1
-.group2 <- params$group2
+#.group1 <- params$group1
+#.group2 <- params$group2
 if (!exists("gct")) {
   gct <- .GlobalEnv$make_random_gct()
 }
@@ -173,13 +172,141 @@ if (!exists("gct")) {
 ```{r, ora-load}
 library(WebGestaltR)
 
-.meta <- gct@cdesc
+.organism = "hsapiens"
+.enrichDatabase = "geneontology_Biological_Process_noRedundant"
+.enrichMethod = "GSEA"
+# enrichmethod == GSEA means interestGene data.frame with two columns, geneids and scores
+.referenceSet <- "genome_protein-coding"
+.isOutput <- TRUE # false only returns a dataframe with the enrichment results, useful for analyzing many combinations of interesting genes
+# .outputDirectory <- params$output_dir
+.projectName <- params$project_name
+#WebGestaltR::listReferenceSet()
+.nThreads <- 1
+.output_dir <- .params$output_dir
+.output_dir <- "./WebGestaltR_GSEA/"
+
+.cache_dir <- params$cache_dir
+.cache_dir <- "./WebGestaltR_cache"  
   
+.n_perm <- 10
   
 ```
+```{r, label='gsea-funcs'}
+
+signal2noise <- function(expression_matrix, group1, group2) {
+  expression_matrix <- .mat
+  group1 <- .grp1_samples
+  group2 <- .grp2_samples
+  
+  group1_expression <- expression_matrix[, group1]
+  group2_expression <- expression_matrix[, group2]
+  
+  # group1_means <- colMeans(group1_expression)
+  # group2_means <- colMeans(group2_expression)
+  
+  group1_means <- apply(group1_expression, 1, mean)
+  group2_means <- apply(group2_expression, 1, mean)
+  
+  group1_var <- apply(group1_expression, 1, var)
+  group2_var <- apply(group2_expression, 1, var)
+  
+  s2n <- (group1_means - group2_means) / (group1_var + group2_var)
+  return(s2n)
+}
 
 
-```{r, label=gsea-one-comparison-func}
+.func2 <- function(.a_subset, .comparison){
+  
+  
+    ( .subsets <- .comparison$subsets )
+  # list with name and filter_expression
+  # .a_subset <- .subsets[[1]]
+  .subname <- .a_subset$name
+  ( .name <- .comparison$name )
+  ( .contrast_col <- .comparison$contrast_column )
+  .filter_expression <- .a_subset$filter_expression
+  # .filter_expression <- "all()"
+  ( .subset_expression <- parse(text = .filter_expression ) )
+  .metadata <- gct@cdesc %>% filter(eval(.subset_expression)) 
+  
+  .grp1 <- .comparison$group_1_value
+  .grp2 <- .comparison$group_2_value
+  .grp1_samples <- .metadata[ .metadata[.contrast_col] == .grp1, "id" ]
+  .grp2_samples <- .metadata[ .metadata[.contrast_col] == .grp2, "id" ]
+  .mat <- mat(gct) 
+  #.mat[ ,.grp1_samples ]
+  .s2n_res  <- .GlobalEnv$signal2noise(.mat, .grp1_samples, .grp2_samples) 
+  .s2n_table <- tibble(GeneID = names(.s2n_res), Value = .s2n_res)
+  
+  if (!fs::dir_exists(.output_dir)){
+    fs::dir_create(.output_dir)
+  }
+  #.OUTPUT_DIR <- "."
+  # .project_name <- paste0(.name, "_", .subname) 
+  .project_name <- paste0(.name, "_", .subname) %>% gsub("_$", "", .) # get rid of extra
+  .resultant_project_dir <- file.path(.output_dir, paste0("Project_", .project_name))
+  ( .resultant_project_dir )
+  
+  if (fs::dir_exists(.resultant_project_dir)){
+    cat(paste(.resultant_project_dir, "already exists\n", "Skipping"))
+    return
+  }
+  #.project_name <- "GSEA-test-immune"
+  # else run
+
+ cat(paste("running gsea", "outdir", .resultant_project_dir, '\n'))
+
+  # .res <- WebGestaltR::WebGestaltR(
+  #   #  enrichMethod = .enrichMethod,
+  #   enrichMethod = "GSEA",
+  #   interestGene = .s2n_table,
+  #   interestGeneType = "entrezgene",
+  #   perNum = .n_perm,
+  #   organism = .organism,
+  #   enrichDatabase = .enrichDatabase,
+  #   referenceSet = .referenceSet,
+  #   isOutput = .isOutput,
+  #   nThreads = .nThreads,
+  #   cache = .cache_dir,
+  #   projectName = .project_name,
+  #   outputDirectory = .output_dir
+  # )
+  # .res # data frame with geneSet, description, link, ES, NES, pValue, ..
+}
+
+  
+.func1 <- function(.comparison){
+  
+  
+  # .compariso
+   # .comparison <- .comparisons$value[[1]]
+    ( .name <- .comparison$name )
+    ( .contrast_col <- .comparison$contrast_column )
+    ( .subsets <- .comparison$subsets )
+    if (is.null(.subsets)){
+      .subsets <- list(  # a list with just 1 subset comparison, which is everything
+        list(name='', filter_expression="all()")
+      )
+    }
+    #.a_subset <- .subsets[[1]]
+    # filter down based on
+  # browser()
+  .gesa_results <- .subsets %>% map(.func2, .comparison)
+    #.gsea_results
+}
+
+#.metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+#( .comparisons <- .params$comparisons )
+.comparisons$value %>%  purrr::map(.func1)
+#.comparisons$value %>%  purrr::map(.func1)
+
+
+# ( .comparisons <- .params$comparisons )
+# ( .comparison <- .comparisons$value[[2]])
+#.comparisons$value %>%  purrr::map(.func)
+```
+
+```{r, label=gsea-one-comparison-loading-testing, eval=F}
 ( .comparisons <- .params$comparisons$value )
 ( .comparison <- .comparisons[[1]])
 ( .comparison$name )
@@ -204,12 +331,12 @@ library(WebGestaltR)
 
 ( .comparisons[[1]]$subset )
 ( .subsets <- .comparison$subsets )
-( .comparison_formula <- .comparison$formula )
+#( .comparison_formula <- .comparison$formula )
 ( .subset <- .subsets[[1]] )
  
 
-(  .subset_expression <- parse(text = .subset) )
 ( .contrast_vector <- .comparison_formula %>% parse(text = .) )
+(  .subset_expression <- parse(text = .subset) )
 
 .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
 (.updated_comparison_formula <- paste0("filtered_metadata$", .comparison$formula))
@@ -267,7 +394,7 @@ comp_name <- .comparison$name
 # enrichmethod == GSEA means interestGene data.frame with two columns, geneids and scores
 .referenceSet <- "genome_protein-coding"
 .isOutput <- TRUE # false only returns a dataframe with the enrichment results, useful for analyzing many combinations of interesting genes
-.outputDirectory <- params$output_dir
+#.outputDirectory <- params$output_dir
 .projectName <- params$project_name
 #WebGestaltR::listReferenceSet()
 .nThreads <- 4

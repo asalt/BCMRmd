@@ -133,7 +133,7 @@ end: 1
 ---
 
 
-```{r, label=cluster-load, include=F}
+```{r, label=gsea-load, include=F}
 library(ggplot2)
 library(cmapR)
 library(tidyr)
@@ -148,30 +148,33 @@ knitr::opts_chunk$set(
   warning = params$logging$warning
 )
 
-.DRYRUN <- F
+.DRYRUN <- T
 
 knitr::opts_chunk$set(echo = TRUE)
 source("funcs.R") # make_random_gct
 ```
 
 
-```{r, ora-gct-check}
+```{r, gsea-parms-gct-check}
 
-.params <- read_rmd_params("GSEA.Rmd")
+#params <- read_rmd_params("GSEA.Rmd") # note we shouldn't do this , just for debugging
+.params <- params
 # .gct_file <- params$gct_file[['value']]
-.gct_file <- .params$gct_file$value
-if (!is.null(.gct_file)) {
+
+
+.gct_file <- params$gct_file
+if (!is.null(.gct_file) & (!exists("gct"))) {
   gct <- cmapR::parse_gctx(.gct_file)
+}
+if (!exists("gct")) {
+  gct <- .GlobalEnv$make_random_gct()
 }
 
 # .group1 <- params$group1
 # .group2 <- params$group2
-if (!exists("gct")) {
-  gct <- .GlobalEnv$make_random_gct()
-}
 ```
 
-```{r, ora-load}
+```{r, gsea-parameters}
 library(WebGestaltR)
 
 .organism <- "hsapiens"
@@ -184,7 +187,7 @@ library(WebGestaltR)
 .projectName <- params$project_name
 # WebGestaltR::listReferenceSet()
 .nThreads <- 1
-.output_dir <- .params$output_dir
+.output_dir <- params$output_dir
 .output_dir <- "./WebGestaltR_GSEA/"
 
 .cache_dir <- params$cache_dir
@@ -217,11 +220,18 @@ signal2noise <- function(expression_matrix, group1, group2) {
 }
 ```
 
-```{r, label=gsea-func2}
+```{r, label=gsea-func2,echo=T}
+#( .comparisons <- params$comparisons )
+  #browser()
+if (is.null(params$comparisons)){
+  print(comparisons)
+  knitr::knit_exit()
+}
 
 
 .func2 <- function(.a_subset, .comparison) {
-  (.subsets <- .comparison$subsets)
+  cat(".func2")
+  #(.subsets <- .comparison$subsets)
   # list with name and filter_expression
   # .a_subset <- .subsets[[1]]
   .subname <- .a_subset$name
@@ -287,9 +297,15 @@ signal2noise <- function(expression_matrix, group1, group2) {
   .res # data frame with geneSet, description, link, ES, NES, pValue, ..
 }
 
+```
+```{r gsea-func1}
 
 .func1 <- function(.comparison) {
-
+   if (is.null(.comparison)) {
+    warning("Comparison information is missing. Skipping this comparison.")
+    cat("Comparison information is missing. Skipping this comparison.")
+    return()
+  }
 
   # .compariso
   # .comparison <- .comparisons$value[[1]]
@@ -302,15 +318,24 @@ signal2noise <- function(expression_matrix, group1, group2) {
     )
   }
   # .a_subset <- .subsets[[1]]
-  # filter down based on
   # browser()
+  # .subsets crashses
+  .subsets %>% str %>% cat
+  # if we get to here, .comparison should be a valid list
   .gesa_results <- .subsets %>% map(.func2, .comparison)
   # .gsea_results
 }
 
 # .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
-( .comparisons <- .params$comparisons )
-.comparisons$value %>% purrr::map(.func1)
+
+#.comparisons$value %>% purrr::map(.func1)
+
+#params$comparisons %>% purrr::map(.func1)
+if (!is.null(params$comparisons)){
+  params$comparisons %>% purrr::map(.func1)
+}
+cat(str(params$comparisons))
+
 # .comparisons$value %>%  purrr::map(.func1)
 
 

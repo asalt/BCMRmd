@@ -18,15 +18,20 @@ params:
   comparisons:
     description: description
     value:
-      - name: "pdx_vs_src"
-        contrast_column: SampleType
-        group_1_value: "pdx"
-        group_2_value: "src"
+      - name: "EHT_over_DMSO"
+        contrast_column: rx
+        group_num_value: "EHT"
+        group_den_value: "DMSO"
+        description: "uses num / denom for comparison, reflected in output name"
         subsets:
-          - name: "Model_TNBC"
-            filter_expression: "PDXModel == 'TNBC'"
+          - name: "Kasumi_06h"
+            filter_expression: "cell=='Kasumi' & timepoint == '06h'"
+          - name: "Kasumi_24h"
+            filter_expression: "cell=='Kasumi' & timepoint == '24h'"
+          - name: "Kasumi_72h"
+            filter_expression: "cell=='Kasumi' & timepoint == '72h'"
           - name: "Model_HER2"
-            filter_expression: "stringr::str_detect('HER2', PDXModel)"
+            filter_expression: "stringr::str_detect(PDXModel, 'HER2')"
           # - Model_TNBC: "PDXModel == 'TNBC'"
           # - Model_HER2: "'HER2' %in% PDXModel"
       # - name: "test"
@@ -34,8 +39,10 @@ params:
         contrast_column: SampleType
         group_1_value: "pdx"
         group_2_value: "src"
+        
   gct_file:
-    value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct"
+    #value: "MSPC000769_TMT11_prof_Config_data_gct_all_1.0more_nonzero_parametricBatch_plex_noCov_normtype_median_n99x10955.gct"
+    value: "./testdata/MSPC000607_redux_data_gct_all_1.0more_nonzero_normtype_median_n45x6939.gct"
     description: if specified, will use this gct file
           
   output_dir: 
@@ -82,8 +89,9 @@ params:
     value: 1000
     description: "Permutations, it's like all the different ways your GPS can take you home!"
   permute:
-    value: phenotype
+    value: gene_set
     description: "Permute, it's like rearranging the furniture, but for gene_sets or phenotype!"
+    options: [ phenotype, gene_set ]
   plot_top_x:
     value: 10
     description: "Like the top 10 movies of the year, but it's for enrichment plots!"
@@ -100,7 +108,7 @@ params:
     value: 500
     description: "Set max, like the biggest party you can imagine, but for genesets!"
   set_min:
-    value: 15
+    value: 10
     description: "Set min, it's like a small gathering for your closest genesets!"
   sort:
     value: real
@@ -129,9 +137,7 @@ params:
   
 
 end: 1
-
 ---
-
 
 ```{r, label=gsea-load, include=F}
 library(ggplot2)
@@ -143,18 +149,23 @@ library(broom)
 library(magrittr)
 library(scales)
 library(limma)
+library(fgsea)
+library(WebGestaltR)
 knitr::opts_chunk$set(
-  message = params$logging$message,
-  warning = params$logging$warning
+  # message = params$logging$message,
+  # warning = params$logging$warning
+  message = TRUE,
+  warning = TRUE
 )
 
-.DRYRUN <- T
+#.DRYRUN <- T
+.DRYRUN <- F
 
 knitr::opts_chunk$set(echo = TRUE)
 source("funcs.R") # make_random_gct
 ```
 
-
+## load data
 ```{r, gsea-parms-gct-check}
 
 #params <- read_rmd_params("GSEA.Rmd") # note we shouldn't do this , just for debugging
@@ -172,10 +183,13 @@ if (!exists("gct")) {
 
 # .group1 <- params$group1
 # .group2 <- params$group2
+
+```
+```{r, gsea-cdesc}
+gct@cdesc %>% pillar::glimpse() #%>% message()
 ```
 
 ```{r, gsea-parameters}
-library(WebGestaltR)
 
 .organism <- "hsapiens"
 .enrichDatabase <- "geneontology_Biological_Process_noRedundant"
@@ -193,7 +207,7 @@ library(WebGestaltR)
 .cache_dir <- params$cache_dir
 .cache_dir <- "./WebGestaltR_cache"
 
-.n_perm <- 10
+.n_perm <- 1000
 ```
 
 ```{r, label='gsea-funcs'}
@@ -220,39 +234,94 @@ signal2noise <- function(expression_matrix, group1, group2) {
 }
 ```
 
+## func2 run
 ```{r, label=gsea-func2,echo=T}
 #( .comparisons <- params$comparisons )
   #browser()
-if (is.null(params$comparisons)){
-  print(comparisons)
-  knitr::knit_exit()
-}
-
 
 .func2 <- function(.a_subset, .comparison) {
-  cat(".func2")
+  
+  message(".func2")
+  message("comparison:\n", .comparison)
+  message("a subset:\n", .a_subset)
+  
+  #message('here is the subset:')
+  #.a_subset %>% str %>% message()
+  .subname <- .a_subset$name
+  .name <- .comparison$name
+  .contrast_col <- .comparison$contrast_column
+  .filter_expression <- .a_subset$filter_expression
+  .subset_expression <- parse(text = .filter_expression)
+  # list(
+  #   the_subset = .a_subset,
+  #   comparison_name = .name,
+  #   contrast_col = .contrast_col,
+  #   filter_expression = .filter_expression,
+  #   subset_name = .subname,
+  #   subset_expression = .subset_expression
+  # ) %>% message()
+  #flush.console()
+  
+  .metadata <- NULL
+  tryCatch({
+    .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
+    #.metadata
+  },
+    warning = function(w) {
+    message("Warning: ", w)
+    NULL
+  }, error = function(e) {
+    message("Error parsing subset_expression ", e)
+    message("Filter expression: ", .filter_expression)
+    message("Subset expression: ", .subset_expression)
+  })
+  
+  if (is.null(.metadata)){
+    message("metadata selection failed")
+    return(list())
+  }
+  
+  if (dim(.metadata)[1] == 0){
+    message("no metadata remaining after subset selection")
+    return(list())
+  }
+  
+  # message('here is the comparison:')
+  # .comparison %>% str %>% message()
+  # # Add more debugging messages related to filter expressions
+  # message("Filter expression:")
+  # message(.a_subset$filter_expression)
+  # message("Subset expression:")
+  #capture.output('new file', file = 'GSEA.log', append=T)
+  #capture.output('GSEA testing \nwhat is goinig on.', file = 'GSEA.log', append=T)
+  # message(.subset_expression) 
+  #knitr::knit_exit()
+  #capture.output('knitr::exit()\n', file = 'GSEA.log', append=T)
+  # the warnings and the cat do not work when I have knit_exit() but i want to see them in terminal
+  # .comparison %>% str %>% cat
   #(.subsets <- .comparison$subsets)
   # list with name and filter_expression
   # .a_subset <- .subsets[[1]]
-  .subname <- .a_subset$name
-  (.name <- .comparison$name)
-  (.contrast_col <- .comparison$contrast_column)
-  .filter_expression <- .a_subset$filter_expression
   # .filter_expression <- "all()"
-  (.subset_expression <- parse(text = .filter_expression))
-  .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
-  if (dim(.metadata)[1] == 0){
-    cat("no metadata remaining after subset selection")
-    
-  }
+  #capture.output(str(.filter_expression), file='GSEA.log', append=T)
+  # capture.output('now returning\n', file = 'GSEA.log', append=T)
+  
+  #return(list()) # return list as is expected by purrr::map
+  
 
-  .grp1 <- .comparison$group_1_value
-  .grp2 <- .comparison$group_2_value
-  .grp1_samples <- .metadata[.metadata[.contrast_col] == .grp1, "id"]
-  .grp2_samples <- .metadata[.metadata[.contrast_col] == .grp2, "id"]
+  .grp_n <- .comparison$group_num_value
+  .grp_d <- .comparison$group_den_value
+  message("Selecting group sample names:")
+  if (!(.contrast_col %in% colnames(.metadata))){
+    warning("contrast col not in colnames of metadata")
+    return(list())
+  }
+  .grp_n_samplenames <- .metadata[.metadata[.contrast_col] == .grp_n, "id"]
+  .grp_d_samplenames <- .metadata[.metadata[.contrast_col] == .grp_d, "id"]
   .mat <- mat(gct)
+  # filter the data for subset of metadata
   # .mat[ ,.grp1_samples ]
-  .s2n_res <- .GlobalEnv$signal2noise(.mat, .grp1_samples, .grp2_samples)
+  .s2n_res <- .GlobalEnv$signal2noise(.mat, .grp_n_samplenames, .grp_d_samplenames)
   .s2n_table <- tibble(geneid = names(.s2n_res), value = .s2n_res)
 
   if (!fs::dir_exists(.output_dir)) {
@@ -278,29 +347,49 @@ if (is.null(params$comparisons)){
     cat("Dryrun, not running\n")
     return()
   }
+  #WebGestaltR:::get
+  library(msigdbr)
+  msigdb_df <- msigdbr(species = "Homo sapiens", category = "H") 
+  geneSets <- split(msigdb_df$entrez_gene, msigdb_df$gs_name)
+ 
+  #%>%  split(.$gene_symbol, .$gs_name)
 
-  .res <- WebGestaltR::WebGestaltR(
-    #  enrichMethod = .enrichMethod,
-    enrichMethod = "GSEA",
-    interestGene = .s2n_table,
-    interestGeneType = "entrezgene",
-    perNum = .n_perm,
-    organism = .organism,
-    enrichDatabase = .enrichDatabase,
-    referenceSet = .referenceSet,
-    isOutput = .isOutput,
-    nThreads = .nThreads,
-    cache = .cache_dir,
-    projectName = .project_name,
-    outputDirectory = .output_dir
+  # .pathway_name <- "pathway_KEGG"
+  # .pathways <- WebGestaltR:::loadGeneSet(enrichDatabase = .pathway_name)
+  
+  
+  .res <- fgsea(
+    pathways=geneSets,
+    stats=.s2n_res
   )
   .res # data frame with geneSet, description, link, ES, NES, pValue, ..
+
+  # .res <- WebGestaltR::WebGestaltR(
+  #   #  enrichMethod = .enrichMethod,
+  #   enrichMethod = "GSEA",
+  #   interestGene = .s2n_table,
+  #   interestGeneType = "entrezgene",
+  #   perNum = .n_perm,
+  #   organism = .organism,
+  #   enrichDatabase = .enrichDatabase,
+  #   referenceSet = .referenceSet,
+  #   isOutput = .isOutput,
+  #   nThreads = .nThreads,
+  #   cache = .cache_dir,
+  #   projectName = .project_name,
+  #   outputDirectory = .output_dir
+  # )
+  
 }
 
 ```
+
+## func1 get
 ```{r gsea-func1}
 
 .func1 <- function(.comparison) {
+  
+  # if comparison doesn't exist
    if (is.null(.comparison)) {
     warning("Comparison information is missing. Skipping this comparison.")
     cat("Comparison information is missing. Skipping this comparison.")
@@ -317,24 +406,74 @@ if (is.null(params$comparisons)){
       list(name = "", filter_expression = "all()")
     )
   }
+  
   # .a_subset <- .subsets[[1]]
   # browser()
   # .subsets crashses
-  .subsets %>% str %>% cat
+  message('here are the subsets in func1:\n')
+  capture.output("Here are the subsets in .func1\n", file = "GSEA.log", append=T)
+  .subsets %>% str %>% capture.output(file = "GSEA.log", append=T)
+  .subsets %>% str %>% message()
+  
   # if we get to here, .comparison should be a valid list
-  .gesa_results <- .subsets %>% map(.func2, .comparison)
+  # need to check if subsets is null or not, it shouldn't be
+  # if .susubsets is null it should be a default list
+  # .comparison %>% str %>%  capture.output(file = "GSEA.log", append=T)
+  .gesa_results <- .subsets %>% map(~.func2(., .comparison))
   # .gsea_results
+  .gsea_results
 }
 
 # .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
-
 #.comparisons$value %>% purrr::map(.func1)
-
-#params$comparisons %>% purrr::map(.func1)
 if (!is.null(params$comparisons)){
-  params$comparisons %>% purrr::map(.func1)
+  gsea_results_list <- params$comparisons %>% purrr::map(.func1)
+} else {
+  warning("Comparisons information is missing. Skipping all comparisons.")
 }
 cat(str(params$comparisons))
+cat('this is after .func1 and .func2')
+
+gsea_results_list <- .res
+
+
+# Create a function to plot each subset
+plot_NES <- function(data, color) {
+  ggplot(data, aes(x = NES, y = pathway, fill = -log10(padj))) +
+    geom_col() +
+    scale_fill_gradient(low = "white", high = color, 
+                        guide = guide_colorbar(title = "-log10(Adjusted p-value)")) +
+    theme_minimal() +
+    labs(x = "Normalized Enrichment Score", y = "")
+}
+
+makeplot <- function(gsea_result){
+  cutoff<-0
+  result_sig <- gsea_result %>%
+    filter(abs(NES) > cutoff) %>%
+    mutate(pathway = forcats::fct_reorder(pathway, NES))  %>% # reorder for plotting
+    arrange(-pathway)
+  number <- min(10, nrow(result_sig))
+  # Select top and bottom gene sets
+  result_sig <- result_sig %>%
+    slice(c(head(row_number(), number), tail(row_number(), number)))
+  
+  
+  result_sig_pos <- result_sig %>% filter(NES > 0)
+  result_sig_neg <- result_sig %>% filter(NES < 0)
+  # Create the plots
+  plot_pos <- plot_NES(result_sig_pos, "red")
+  plot_neg <- plot_NES(result_sig_neg, "blue")
+  gridExtra::grid.arrange(plot_pos, plot_neg, ncol = 1)
+  # Create the plot
+  # ggplot(result_sig, aes(x = NES, y = pathway, fill = padj)) +
+  #   geom_col() +
+  #   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0.5, 
+  #                        limits = c(0, 1), oob = scales::squish, 
+  #                        guide = guide_colorbar(title = "Adjusted p-value")) +
+  #   theme_minimal() +
+  #   labs(x = "Normalized Enrichment Score", y = "")
+}
 
 # .comparisons$value %>%  purrr::map(.func1)
 

@@ -234,6 +234,46 @@ signal2noise <- function(expression_matrix, group1, group2) {
 }
 ```
 
+```{r, label=gsea-nes-plots}
+# Create a function to plot each subset
+plot_NES <- function(data, color) {
+  ggplot(data, aes(x = NES, y = pathway, fill = -log10(padj))) +
+    geom_col() +
+    scale_fill_gradient(low = "white", high = color, 
+                        guide = guide_colorbar(title = "-log10(Adjusted p-value)")) +
+    theme_minimal() +
+    labs(x = "Normalized Enrichment Score", y = "")
+}
+
+make_gsea_barplot <- function(gsea_result){
+  cutoff<-0
+  result_sig <- gsea_result %>%
+    filter(abs(NES) > cutoff) %>%
+    mutate(pathway = forcats::fct_reorder(pathway, NES))  %>% # reorder for plotting
+    arrange(-pathway)
+  number <- min(10, nrow(result_sig))
+  # Select top and bottom gene sets
+  result_sig <- result_sig %>%
+    slice(c(head(row_number(), number), tail(row_number(), number)))
+  
+  
+  result_sig_pos <- result_sig %>% filter(NES > 0)
+  result_sig_neg <- result_sig %>% filter(NES < 0)
+  # Create the plots
+  plot_pos <- plot_NES(result_sig_pos, "red")
+  plot_neg <- plot_NES(result_sig_neg, "blue")
+  gridExtra::grid.arrange(plot_pos, plot_neg, ncol = 1)
+  # Create the plot
+  # ggplot(result_sig, aes(x = NES, y = pathway, fill = padj)) +
+  #   geom_col() +
+  #   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0.5, 
+  #                        limits = c(0, 1), oob = scales::squish, 
+  #                        guide = guide_colorbar(title = "Adjusted p-value")) +
+  #   theme_minimal() +
+  #   labs(x = "Normalized Enrichment Score", y = "")
+}
+```
+
 ## func2 run
 ```{r, label=gsea-func2,echo=T}
 #( .comparisons <- params$comparisons )
@@ -334,14 +374,16 @@ signal2noise <- function(expression_matrix, group1, group2) {
   (.resultant_project_dir)
   
   cat(fs::dir_exists(.resultant_project_dir))
-  if (fs::dir_exists(.resultant_project_dir)) {
-    cat(paste(.resultant_project_dir, "already exists\n", "Skipping\n"))
-    return()
-  }
+  
+  # if (fs::dir_exists(.resultant_project_dir)) {
+  #   cat(paste(.resultant_project_dir, "already exists\n", "Skipping\n"))
+  #   return()
+  # }
+  
   # .project_name <- "GSEA-test-immune"
   # else run
 
-  cat(paste("running gsea", "outdir", .resultant_project_dir, "\n"))
+  # cat(paste("running gsea", "outdir", .resultant_project_dir, "\n"))
   
   if (.DRYRUN == TRUE){
     cat("Dryrun, not running\n")
@@ -362,8 +404,10 @@ signal2noise <- function(expression_matrix, group1, group2) {
     pathways=geneSets,
     stats=.s2n_res
   )
-  .res # data frame with geneSet, description, link, ES, NES, pValue, ..
-
+  .p <- make_gsea_barplot(.res)
+  print(.p)
+  .res 
+  # data frame with geneSet, description, link, ES, NES, pValue, ..
   # .res <- WebGestaltR::WebGestaltR(
   #   #  enrichMethod = .enrichMethod,
   #   enrichMethod = "GSEA",
@@ -379,7 +423,6 @@ signal2noise <- function(expression_matrix, group1, group2) {
   #   projectName = .project_name,
   #   outputDirectory = .output_dir
   # )
-  
 }
 
 ```
@@ -421,8 +464,11 @@ signal2noise <- function(expression_matrix, group1, group2) {
   # .comparison %>% str %>%  capture.output(file = "GSEA.log", append=T)
   .gesa_results <- .subsets %>% map(~.func2(., .comparison))
   # .gsea_results
-  .gsea_results
+  .gesa_results 
 }
+```
+
+```{r label=gsea-run-func1}
 
 # .metadata <- gct@cdesc %>% filter(eval(.subset_expression))
 #.comparisons$value %>% purrr::map(.func1)
@@ -434,46 +480,9 @@ if (!is.null(params$comparisons)){
 cat(str(params$comparisons))
 cat('this is after .func1 and .func2')
 
-gsea_results_list <- .res
+#gsea_results_list <- .res
 
 
-# Create a function to plot each subset
-plot_NES <- function(data, color) {
-  ggplot(data, aes(x = NES, y = pathway, fill = -log10(padj))) +
-    geom_col() +
-    scale_fill_gradient(low = "white", high = color, 
-                        guide = guide_colorbar(title = "-log10(Adjusted p-value)")) +
-    theme_minimal() +
-    labs(x = "Normalized Enrichment Score", y = "")
-}
-
-makeplot <- function(gsea_result){
-  cutoff<-0
-  result_sig <- gsea_result %>%
-    filter(abs(NES) > cutoff) %>%
-    mutate(pathway = forcats::fct_reorder(pathway, NES))  %>% # reorder for plotting
-    arrange(-pathway)
-  number <- min(10, nrow(result_sig))
-  # Select top and bottom gene sets
-  result_sig <- result_sig %>%
-    slice(c(head(row_number(), number), tail(row_number(), number)))
-  
-  
-  result_sig_pos <- result_sig %>% filter(NES > 0)
-  result_sig_neg <- result_sig %>% filter(NES < 0)
-  # Create the plots
-  plot_pos <- plot_NES(result_sig_pos, "red")
-  plot_neg <- plot_NES(result_sig_neg, "blue")
-  gridExtra::grid.arrange(plot_pos, plot_neg, ncol = 1)
-  # Create the plot
-  # ggplot(result_sig, aes(x = NES, y = pathway, fill = padj)) +
-  #   geom_col() +
-  #   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0.5, 
-  #                        limits = c(0, 1), oob = scales::squish, 
-  #                        guide = guide_colorbar(title = "Adjusted p-value")) +
-  #   theme_minimal() +
-  #   labs(x = "Normalized Enrichment Score", y = "")
-}
 
 # .comparisons$value %>%  purrr::map(.func1)
 

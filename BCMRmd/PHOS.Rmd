@@ -1,0 +1,183 @@
+---
+title: "PHOS"
+author: "AlexSaltman"
+date: "`r Sys.Date()`"
+runtime: shiny
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+
+params:
+  PROF:
+    value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_none_n10x7507.gct"
+    description: "gct file for one profiling experiment"
+  PHOS:
+    value: "51963_1_6_site_table_nr.tsv_n10x14785.gct"
+    description: "gct file for one phosphoprofiling experiment"
+  ROOTPATH: 
+    #value: "`normalizePath(dirname('.'))`"
+    value: "~/Documents/MSPC000967/"
+    description: supposed to be dynamic
+  paramfile:
+    value: ""
+  cluster_methods:
+    value: [kmeans]
+  pca:
+    value:
+      color:
+        value:
+      marker:
+        value:
+      annotate:
+        value: true
+      center:
+        value: true
+      scale: 
+        value:
+          true
+  cluster:
+    value:
+      cluster_rows:
+        value: true
+        description: "cluster the rows"
+      cluster_columns:
+        value: true
+      cluster_row_slices:
+        value: true
+      cluster_col_slices:
+        value: true
+      clustering_distance_rows:
+        value: euclidean
+      clustering_method_rows:
+        value: ward.d2
+      legend_include:
+        value: 
+        description: "metadata variables to include"
+      legend_exclude:
+        value:
+        description: "metadata variables to exclude"
+  logging:
+    value:
+      message: TRUE
+      warning: TRUE
+      quiet: TRUE
+end:
+# 
+  
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(cmapR))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(fs))
+suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(ComplexHeatmap))
+suppressPackageStartupMessages(library(circlize))
+suppressPackageStartupMessages(library(tidymodels))
+library(tidymodels)
+library(tibble)
+library(magrittr)
+
+mykable <- function(data) {
+    knitr::kable(data, booktabs = TRUE, digits = 4) %>%
+        kable_styling(latex_options = c("striped", "scale_down"),
+                      bootstrap_options = c("striped", 'condensed', "bordered")
+                      )
+}
+```
+
+
+
+
+```{r, label="phos.load"}
+ROOTPATH<- fs::path_abs(params$ROOTPATH)
+ROOTPATH %>% print
+
+prof_gct <- params$PROF
+phos_gct <- params$PHOS
+
+prof <- file.path(ROOTPATH, prof_gct) %>% cmapR::parse_gctx()
+phos <- file.path(ROOTPATH, phos_gct) %>% cmapR::parse_gctx()
+
+# prof <- cmapR::parse_gctx(prof_gct)
+# phos <- cmapR::parse_gctx(phos_gct)
+```
+
+```{r}
+prof@cdesc %>% mykable()
+```
+
+```{r}
+phos@cdesc %>% mykable()
+```
+
+
+
+```{r}
+mat(phos) %>% head(2)
+```
+```{r}
+phos@rdesc %>% head(3)
+```
+```{r, label="phos.shinyapp", include=FALSE, eval=FALSE}
+library(DT)
+library(shiny)
+
+# shiny app
+ui <- fluidPage(
+  titlePanel("Dynamic Table Search"),
+  sidebarLayout(
+    sidebarPanel(
+      textInput("geneid", "Enter Gene ID:")
+    ),
+    mainPanel(
+      DT::dataTableOutput("table")
+    )
+  )
+)
+server <- function(input, output) {
+  make_p_table <- function(input,output){
+    .geneid <- input$geneid
+    .geneid <- "38418"
+    prof_expression_data <- mat(prof)[.geneid,]
+    .psites <- phos@rdesc[phos@rdesc$GeneID == .geneid,]
+    phos_expression_data <- mat(phos)[rownames(.psites), ]
+    #phos_site <- phos@rdesc$phosphosites  # Adjust this line based on how phosphosites is stored in your data
+    #prof$Phosphosites <- phos_site
+    DT::datatable(.psites)
+    }
+  output$table <- DT::renderDataTable(make_p_table(input, output))
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+
+```{r, label='phos.makeptable'}
+make_p_table <- function(geneid){
+  geneid <- geneid
+  prof_expression_data <- mat(prof)[geneid,]
+  .psites <- phos@rdesc[phos@rdesc$GeneID == geneid,]
+  phos_expression_data <- mat(phos)[rownames(.psites), ]
+  #phos_site <- phos@rdesc$phosphosites  # Adjust this line based on how phosphosites is stored in your data
+  #prof$Phosphosites <- phos_site
+  DT::datatable(.psites)
+}
+```
+```{r, label='phos.geneid'}
+  geneid <- "38418"
+  make_p_table(geneid)
+
+```
+
+
+
+
+

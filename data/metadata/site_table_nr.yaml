@@ -1,0 +1,55 @@
+~file:
+  name: recno_runno_searchno_site_table_nr.tsv
+  type: TSV
+  description: Protein modification data
+columns:
+  - name: recno
+    description: Record identifier
+  - name: runno
+    description: Run number
+  - name: searchno
+    description: Search number
+  - name: basename
+    description: Base name of the data source
+  - name: SiteName
+    description: Name of the protein modification site
+  - name: SiteID
+    description: Identifier of the protein modification site
+  - name: GeneID
+    description: Gene identifier
+  - name: GeneSymbol
+    description: Gene symbol
+  - name: GeneDescription
+    description: Description of the gene
+  - name: Site
+    description: Protein modification site descriptor
+  - name: AA
+    description: Amino acid at the modification site
+  - name: MassShift
+    description: Mass shift due to the modification
+  - name: ModiType
+    description: Type of modification
+  - name: Primary_select
+    description: Primary selected protein
+  - name: Secondary_select
+    description: Secondary selected protein
+  - name: Unique_select
+    description: Unique selected protein
+  - name: Best_select
+    description: Best selected protein
+  - name: Protein_Accession_Selected
+    description: Final selected protein
+  - name: Reason_Selected
+    description: Reason for protein selection
+  - name: Protein_Length_Selected
+    description: Length of the selected protein
+  - name: AApos_Selected
+    description: Position of the selected amino acid
+  - name: Protein_Accessions
+    description: List of associated proteins
+  - name: AApos_List
+    description: List of associated amino acid positions
+  - name: TopScore
+    description: Quality score for the modification site
+  - name: recno_runno_searchno_label_*
+    description: Quantitative measurements related to the modification site for particular TMT channel

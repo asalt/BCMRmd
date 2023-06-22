@@ -12,7 +12,7 @@ params:
   routines:
     value:
       cluster: false
-      PCA: true
+      PCA: false
       volcano: false
       GSEA: true
   gct_file:
@@ -62,14 +62,15 @@ params:
         description: "metadata variables to exclude"
   logging:
     value:
-      message: FALSE
-      warning: FALSE
+      message: TRUE
+      warning: TRUE
+      quiet: TRUE
 end:
 # 
   
 ---
 
-```{r tackle.setup, include=FALSE}
+```{r tackle-setup, include=FALSE}
 suppressPackageStartupMessages(library(tidymodels))
 library(modelsummary)
 
@@ -87,6 +88,17 @@ library(DT)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r, label=tackle-params-check, eval=T, message=T, warning=T}
+print(params)
+print(params$routines)
+cat(params$routines %>% as.character())
+#browser()
+if (is.null(params$routines)){
+  knitr::knit_exit()
+  
+}
+
+```
 
 logging options
 ```{r label=tackle-logging}
@@ -136,7 +148,7 @@ create_summary <- function(input) {
 
 tackle load
 
-```{r label=tackle.load}
+```{r label=tackle-load}
 #ROOTPATH <- params$ROOTPATH
 ROOTPATH<- fs::path_abs(params$ROOTPATH)
 
@@ -289,6 +301,7 @@ render_cluster_report <- function(method = "kmeans") {
 
 ```{r tackle-cluster-report-sep-page, echo=T, results="asis", eval=params$routines$cluster}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+( .html )
 ## {-}
 ```
 
@@ -296,9 +309,9 @@ render_cluster_report <- function(method = "kmeans") {
 
 
 render PCA.Rmd
-```{r, label=tackle-pca, message=T, warning=T, results='show', eval=params$routines$pca}
+```{r, label=tackle-pca, message=T, warning=T, results='show', eval=params$routines$PCA}
 
-.params <- params$pca
+.params <- params$PCA
 
 # .params$method <- "kmeans"
 
@@ -321,7 +334,7 @@ render_pca_report <- function(center = T, scale = F) {
 }
 ```
 
-```{r, echo=T}
+```{r, echo=T, eval=params$routines$PCA}
 # TODO: allow customization
 .center <- T
 .scale <- T
@@ -333,30 +346,55 @@ render_pca_report <- function(center = T, scale = F) {
 # htmltools::includeHTML(.out)
 ```
 LINK
-```{r pca-report-1-html-pagetest, echo=F, results="asis"}
+```{r pca-report-1-html-pagetest, echo=F, results="asis", eval=params$routines$PCA}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 # print(.html)
 ## {-}
 ```
 next
 
-```{r pca-report-2}
+```{r pca-report-2, eval=params$routines$PCA}
 .out <- render_pca_report(center = .center, scale = F)
 # htmltools::includeHTML(.out)
 ```
 
-```{r pca-report-2-html-pagetest, echo=F, results="asis"}
+```{r, pca-report-2-html-pagetest, echo=F, results="asis", eval=params$routines$PCA}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 ## {-}
 ```
 
 
+
+
+
 ## GSEA
 
-```{r tackle-gsea-render}
+```{r, tackle-gsea-render, eval=params$routines$GSEA}
+.gsea_params <- params$gsea
+.out <- rmarkdown::render("GSEA.Rmd",
+  #output_file = .output_file_name,
+  quiet = F,
+  params = .gsea_params,
+  envir = new.env(),
+  # params=.params,
+  # envir = globalenv(),
+  # envir = new_env
+  # documentation=1,
+)
+.out <- path_rel(.out) # make it relative so file can be found by browser
+# return(.output_file_name)
 
-``` 
+(params$routines )
+# c(params$ROOTPATH, .output_file_name) %>% fs::path_join() %>% fs::path_abs()
 
+```
+
+```{r, tackle-gsea-report, echo=F, results="asis", eval=params$routines$GSEA}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+## {-}
+(.html)
+
+```
 ## YFG
 
 ```{r, label=tackle-onegene, eval=F, fig.width=10, fig.height=7}
@@ -381,4 +419,6 @@ next
 .sel %>% DT::datatable()
 # .sel
 ```
+
+
 

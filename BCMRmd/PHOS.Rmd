@@ -2,16 +2,19 @@
 title: "PHOS"
 author: "AlexSaltman"
 date: "`r Sys.Date()`"
-runtime: shiny
+# runtime: shiny
 output:
   html_document:
-    code_folding: hide
+    code_folding: show
     highlight: zenburn # pygments, kate, monochrome, zenburn
     toc: yes
 
 params:
   PROF:
-    value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_none_n10x7507.gct"
+    value: "MSPC000967_TMT10_prof_Config_data_gct_linear_all_1more_nonzero_normtype_none_n10x7507.gct"
+    description: "gct file for one profiling experiment"
+  PROF_correct:
+    value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_median_n10x7507.gct" 
     description: "gct file for one profiling experiment"
   PHOS:
     value: "51963_1_6_site_table_nr.tsv_n10x14785.gct"
@@ -83,6 +86,7 @@ suppressPackageStartupMessages(library(tidymodels))
 library(tidymodels)
 library(tibble)
 library(magrittr)
+source("funcs.R")
 
 mykable <- function(data) {
     knitr::kable(data, booktabs = TRUE, digits = 4) %>%
@@ -93,74 +97,504 @@ mykable <- function(data) {
 ```
 
 
+# Load
 
+## gct
 
 ```{r, label="phos.load"}
 ROOTPATH<- fs::path_abs(params$ROOTPATH)
 ROOTPATH %>% print
 
 prof_gct <- params$PROF
+prof_gct_correct <- params$PROF_correct
 phos_gct <- params$PHOS
 
+prof_correct <- file.path(ROOTPATH, prof_gct_correct) %>% cmapR::parse_gctx()
 prof <- file.path(ROOTPATH, prof_gct) %>% cmapR::parse_gctx()
 phos <- file.path(ROOTPATH, phos_gct) %>% cmapR::parse_gctx()
 
 # prof <- cmapR::parse_gctx(prof_gct)
 # phos <- cmapR::parse_gctx(phos_gct)
 ```
+## add metadata
 
-```{r}
+```{r, label='phos.manual-metadata', eval=T}
+.res<-left_join(prof@rdesc,
+          distinct(phos@rdesc, GeneID, GeneSymbol),
+          by = c('rdesc' = 'GeneID')
+          )
+prof@rdesc <- .res
+
+.phos_metadata <- tibble::tribble(
+~id, ~name,	~recno,	~runno,	~searchno,	~label,	~assay,	~genotype,	~replicate,
+"51963_1_6_126", "DL1-1",	  51963,	1,	6,	"126", 	"IMAC",	"WT",	1,
+"51963_1_6_127_N", "DL1-2",	  51963,	1,	6,	"127N",	"IMAC",	"WT",	2,
+"51963_1_6_127_C", "DL1-3",	  51963,	1,	6,	"127C",	"IMAC",	"WT",	3,
+"51963_1_6_128_N", "IntS6-1",	51963,	1,	6,	"128N",	"IMAC",	"IntS6",	1,
+"51963_1_6_128_C", "IntS6-2",	51963,	1,	6,	"128C",	"IMAC",	"IntS6",	2,
+"51963_1_6_129_N", "IntS6-3",	51963,	1,	6,	"129N",	"IMAC",	"IntS6",	3,
+"51963_1_6_129_C", "IntS6-4",	51963,	1,	6,	"129C",	"IMAC", "IntS6", 	4,
+"51963_1_6_130_N", "IntS12-1",	51963, 	1, 	6,	"130N",	"IMAC", "IntS12",	1,
+"51963_1_6_130_C", "IntS12-2",	51963, 	1, 	6,	"130C",	"IMAC", "IntS12",	2,
+"51963_1_6_131_N", "IntS12-3",	51963, 	1, 	6,	"131",	"IMAC", "IntS12",	3
+)
+#.phos_metadata$id <- .phos_metadata$name
+.phos_sample_metadata <- .phos_metadata %>% mutate(id = factor(id, levels=phos@cid, ordered=T)) %>% arrange(id) %>% as.data.frame()
+rownames(.phos_sample_metadata) <- .phos_sample_metadata$id
+#phos@cdesc <- .phos_sample_metadata
+#rownames(.phos_metadata) <- .phos_metadata$name #
+#.cols <- c("id", "recno", "runno", "searchno", "label", "")
+#out <- .phos_metadata %>% left_join(prof@cdesc, by = "id")
+.the_order_we_want <- colnames(mat(phos))
+.newnames <- .phos_sample_metadata %>%
+   mutate(id=factor(id, levels(.the_order_we_want), ordered = T)) %>% 
+   arrange(id) %>% 
+   pull(name)
+rownames(.phos_sample_metadata) <- .newnames
+.phos_sample_metadata$id <- rownames(.phos_sample_metadata)
+# source('funcs.R')
+#colnames(mat(phos)) <- .newnames
+#phos@cid <- .newnames
+.new <- mat(phos)
+colnames(.new) <- .newnames
+# .new %>% dim
+# phos %>% mat %>% dim
+# phos@rdesc %>% dim
+.rdesc <- phos@rdesc
+.rid <- phos@rid
+
+.phos <- new("GCT",
+    mat=.new,
+    cdesc=.phos_sample_metadata,
+    cid=rownames(.phos_sample_metadata),
+    #rid=phos@rid,
+    #rid=rownames(.new),
+    rid=.rid,
+    rdesc=.rdesc,
+    ) 
+# subset_gct(phos)
+# subset_gct(.phos)
+phos <- .phos
+
+#phos <- make_new_gct(phos, mat=.new, cdesc=.phos_metadata, cid=.phos_metadata$name)
+#phos@cdesc <- .phos_metadata
+# phos2 <- make_new_gct(phos, .new)
+# phos <- phos2
+```
+
+```{r, label="phos-phos-debug"}
+
+print(phos@cdesc)
+print(phos@cid)
+print(head(mat(phos)))
+```
+
+
+## preview metadata
+ prof
+ 
+```{r, label="phos-prof-mat"}
+mat(prof) %>% head %>% mykable()
+```
+
+```{r, label="phos-prof-cdesc"}
 prof@cdesc %>% mykable()
 ```
 
-```{r}
+
+ phos 
+ 
+```{r, label="phos-phos-mat"}
+mat(phos) %>% head %>% mykable()
+```
+```{r, label='phos-phos-cdesc'}
 phos@cdesc %>% mykable()
 ```
 
+# Data overview
 
+## filter out not STY
+```{r, label='phos-filter-sty'}
+.tokeep <- phos@rdesc %>% filter(AA %in% c("S", "T", "Y")) %>% rownames
+#.phos %>% cmapR::subset_gct(rid = .tokeep)
+.phos <- cmapR::subset_gct(phos, rid = .tokeep, cid=phos@cid)
+print(phos@cdesc)
+print(phos@cid)
+print(head(mat(phos)))
+phos <-.phos
 
-```{r}
-mat(phos) %>% head(2)
 ```
-```{r}
-phos@rdesc %>% head(3)
-```
-```{r, label="phos.shinyapp", include=FALSE, eval=FALSE}
-library(DT)
-library(shiny)
 
-# shiny app
-ui <- fluidPage(
-  titlePanel("Dynamic Table Search"),
-  sidebarLayout(
-    sidebarPanel(
-      textInput("geneid", "Enter Gene ID:")
-    ),
-    mainPanel(
-      DT::dataTableOutput("table")
-    )
+
+## distributions { .tabset }
+### prof
+```{r, label='phos-dist1', eval=F}
+prof %>% melt_gct() %>%
+  mutate(logvalue = log(value)) %>% 
+  ggviolin(x="id.y", y="logvalue", add = "median_mad")  %>%
+  ggpar(x.text.angle=90)
+
+```
+
+### prof log mednorm
+```{r, label='phos-dist2', cache=T, eval=F}
+prof %>% melt_gct() %>% 
+  mutate(logvalue = log(value)) %>% 
+  group_by(id.y) %>% 
+  mutate(logvalue_mednorm = logvalue-median(logvalue, na.rm=T)) %>%
+  ggviolin(x="id.y", y="logvalue_mednorm", add="mean_sd") %>%
+  ggpar(x.text.angle=90)
+```
+
+### prof mednorm log
+```{r, label='phos-dist3', cache=T, eval=F}
+prof %>% melt_gct() %>% 
+  mutate(value_mednorm = value/median(value, na.rm=T)) %>%
+  mutate(logvalue_mednorm_div = log(value_mednorm)) %>% 
+  ggviolin(x="id.y", y="logvalue_mednorm_div", add="mean_sd") %>%
+  ggpar(x.text.angle=90)
+
+```
+
+
+## distributions - phos { .tabset }
+
+
+
+
+### phos
+```{r, label='phos-dist4', cache=TRUE, eval=F}
+phos %>% melt_gct() %>% ggviolin(x="id.y", y="value")  %>% ggpar(x.text.angle=90)
+```
+
+### phos log
+```{r, label='phos-dist5', cache=T, eval=F}
+phos %>% melt_gct() %>%
+  mutate(logvalue = log(value)) %>%
+  ggviolin(x="id.y", y="logvalue", add="median_mad") %>%
+  ggpar(x.text.angle=90)
+```
+
+### phos log mednorm
+
+```{r, label='phos-dist6', eval=F}
+phos %>% melt_gct() %>% 
+  mutate(logvalue = log(value)) %>% 
+  group_by(id.y) %>% 
+  mutate(logvalue_mednorm = logvalue-median(logvalue, na.rm=T)) %>%
+  ggviolin(x="id.y", y="logvalue_mednorm", add="mean_sd") %>%
+  ggpar(x.text.angle=90)
+
+```
+
+### phos mednorm log
+```{r, label='phos-dist7'}
+phos %>% melt_gct() %>% 
+  group_by(id.y) %>% 
+  mutate(value_mednorm = value/median(value, na.rm=T)) %>%
+  mutate(logvalue_mednorm_div = log(value_mednorm)) %>% 
+  ggviolin(x="id.y", y="logvalue_mednorm_div", add="mean_sd") %>%
+  ggpar(x.text.angle=90)
+
+```
+
+
+
+
+
+
+## normalize
+
+```{r, label='phos-normalize-expr-matrix-1', echo=T, eval=T}
+# prof %>% melt_gct() %>% group_by(id.y) %>% filter(value>0) %>% summarise(median(value))
+# prof %>% melt_gct() %>% group_by(id.y) %>% summarise(median(value))
+
+.min_nonzero <- mat(prof)[ mat(prof) > 0 ] %>% min
+  #mutate(value = (value/.min_nonzero)+.min_nonzero) %>% 
+
+.normalized_prof_matrix <- prof %>%
+  melt_gct %>%
+  group_by(id.y) %>%
+  mutate(value_mednorm = (value+.min_nonzero)/median(value, na.rm=T)) %>% 
+  ungroup() %>% 
+  mutate(value_mednorm_log=log10(value_mednorm)) %>% 
+  group_by(id.x) %>%
+  mutate(zscore = myzscore(value_mednorm_log)) %>% 
+  ungroup()
+  #mutate(value_mednorm_log = value_log-median(value_log, na.rm=T) ) %>% 
+  #mutate(zscore=scale(value_mednorm_log)) %>% 
+  #mutate(value_mednorm=value/median(value, na.rm=T)) %>%
+ # ggviolin(x='id.y', y='zscore')
+.normalized_prof_matrix
+
+.prof_correct_mat_wide <- prof_correct %>% melt_gct() %>% 
+  group_by(id.x) %>% 
+  mutate(zscore=myzscore(value)) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols=id.x,
+   values_from=zscore,
+   names_from = id.y
+   ) %>% as.data.frame()
+.prof_correct_mat_wide$id.x <- NULL # delete
+
+prof_correct_zscore <- new("GCT",
+  mat = as.matrix(.prof_correct_mat_wide),
+  rid = prof@rid,
+  cid = prof@cid,
+  rdesc = prof@rdesc,
+  cdesc = prof@cdesc
   )
-)
-server <- function(input, output) {
-  make_p_table <- function(input,output){
-    .geneid <- input$geneid
-    .geneid <- "38418"
-    prof_expression_data <- mat(prof)[.geneid,]
-    .psites <- phos@rdesc[phos@rdesc$GeneID == .geneid,]
-    phos_expression_data <- mat(phos)[rownames(.psites), ]
-    #phos_site <- phos@rdesc$phosphosites  # Adjust this line based on how phosphosites is stored in your data
-    #prof$Phosphosites <- phos_site
-    DT::datatable(.psites)
-    }
-  output$table <- DT::renderDataTable(make_p_table(input, output))
-}
 
-shinyApp(ui = ui, server = server)
+.normalized_prof_matrix_wide_log <- .normalized_prof_matrix %>%
+  pivot_wider(id_cols=id.x,
+   values_from=value_mednorm_log,
+   names_from = id.y
+   ) %>% as.data.frame()
+rownames(.normalized_prof_matrix_wide_log) <- .normalized_prof_matrix_wide_log$id.x
+.normalized_prof_matrix_wide_log$id.x <- NULL # delete
+
+
+.normalized_prof_matrix_wide_zscore <- .normalized_prof_matrix %>%
+  pivot_wider(id_cols=id.x,
+   values_from=zscore,
+   names_from = id.y
+   ) %>% as.data.frame()
+
+rownames(.normalized_prof_matrix_wide_zscore) <- .normalized_prof_matrix_wide_zscore$id.x
+.normalized_prof_matrix_wide_zscore$id.x <- NULL # delete
+
+prof_zscore <- new("GCT",
+  mat = as.matrix(.normalized_prof_matrix_wide_zscore),
+  rid = prof@rid,
+  cid = prof@cid,
+  rdesc = prof@rdesc,
+  cdesc = prof@cdesc
+  )
+
+
+prof_log <- new("GCT",
+  mat = as.matrix(.normalized_prof_matrix_wide_log),
+  rid = prof@rid,
+  cid = prof@cid,
+  rdesc = prof@rdesc,
+  cdesc = prof@cdesc
+  )
+
+```
+
+## heatmap def
+```{r, label='phos-heatmap-def'}
+make_heatmap <- function(.gct){
+  .negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate", "name")
+  .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
+
+  library(ComplexHeatmap)
+  
+  recycle_colors <- function(type = "qual", n = 8) {
+    # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
+    original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
+    recycled_palette <- rep_len(original_palette, length.out = n)
+    return(recycled_palette)
+  }
+  
+  .color_list <- .column_df %>%
+    as.list() %>%
+    map(~ recycle_colors(n = length(unique(.))))
+  
+  # fix this maybe if better
+  for (col in colnames(.column_df)) {
+    # print(col)
+    # names(.color_list[[col]]) <-  unique(.column_df[[col]])
+    names(.color_list[[col]]) <- unique(.column_df[[col]])
+  }
+
+
+.top_annotation <- columnAnnotation(
+  df = .column_df %>% as.data.frame(),
+  col = .color_list
+  # col = anno_block(gp = gpar(fill = .color_list$metavar1))
+)
+
+  #mat_zscore <- apply(mat(.gct) %>% head(50), MARGIN=1, myzscore)
+  # mat_zscore <- apply(mat(.gct), MARGIN=1, myzscore)
+  # dim(mat_zscore)
+  # mat_zscore <- t(mat_zscore)  # transpose back to original structure
+  # colnames(mat_zscore) <- colnames(mat(.gct))  # Save column names as row names before transpose
+  # mat_zscore <- mat_zscore[, rownames(.column_df)]
+  #mat_zscore = mat_zscore[, rownames(.column_df)]
+  
+  #mat_zscore <- mat_zscore[, rownames(.column_df)] # make sure order is the same
+  mat <- mat(.gct)
+  mat <- mat[, rownames(.column_df)]
+
+  .h <- ComplexHeatmap::Heatmap(
+    mat,
+    top_annotation = .top_annotation,
+    clustering_distance_rows = dist_no_na,
+    clustering_method_rows = 'ward.D2',
+    clustering_method_columns = 'ward.D2',
+    clustering_distance_columns = dist_no_na,
+    column_title_side = "top",
+    column_title_rot = 0,
+    column_names_gp = gpar(fontsize = 9),
+    border = TRUE,
+    use_raster = T,
+    show_row_names = F,
+    show_row_dend = T,
+    
+  )
+  .h
+}
+```
+
+
+```{r}
+make_heatmap(prof_correct_zscore)
+```
+
+
+```{r}
+make_heatmap(prof_log)
+```
+
+```{r}
+make_heatmap(prof_zscore)
+```
+
+
+```{r, label='phos-normalize-expr-matrix2', echo=F, eval=T}
+.normalized_phos_matrix <- phos %>% melt_gct() %>% 
+  group_by(id.y) %>% 
+  mutate(value_mednorm = value / median(value, na.rm=T)) %>% 
+  ungroup() %>% 
+  mutate(logvalue_mednorm = log(value_mednorm)) %>% 
+  group_by(id.x) %>% 
+  mutate(zscore=myzscore(logvalue_mednorm))
+
+.normalized_phos_matrix_wide_zscore <- .normalized_phos_matrix %>%
+  pivot_wider(id_cols=id.x, values_from=zscore, names_from = id.y ) %>% 
+  as.data.frame()
+
+
+rownames(.normalized_phos_matrix_wide_zscore) <- .normalized_phos_matrix_wide_zscore$id.x
+.normalized_phos_matrix_wide_zscore$id.x <- NULL # delete
+
+#mat(phos) <- .normalized_phos_matrix %>% as.matrix
+
+phos_zscore <- new("GCT",
+  mat = as.matrix(.normalized_phos_matrix_wide_zscore),
+  rid = phos@rid,
+  cid = phos@cid,
+  rdesc = phos@rdesc,
+  cdesc = phos@cdesc
+  )
+
+
+#phos %>% melt_gct() %>% group_by(id.y) %>% mutate(value_mednorm=log(value/median(value,na.rm=T))) %>% 
+#  ggviolin(x='id.y', y='value_mednorm')
+phos_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
 ```
 
 
 
-```{r, label='phos.makeptable'}
+
+```{r}
+make_heatmap(phos_zscore)
+```
+
+# heatmaps
+
+
+## heatmap prof
+```{r, label='phos-heatmap-prof', cache=FALSE}
+make_heatmap(prof)
+```
+
+## heatmap phos
+```{r, label='phos-heatmap-phos', cache=FALSE}
+#make_heatmap(phos)
+print(phos@cdesc)
+print(phos@cid)
+print(head(mat(phos)))
+```
+
+# 
+
+# PCA
+render PCA.Rmd
+```{r, label=phos-pca-render-func, message=T, warning=T, results='show', eval=T, class.source='fold-hide', eval=F}
+
+#.params <- params$PCA
+
+# .params$method <- "kmeans"
+
+render_pca_report <- function(center = T, scale = F, title="PCA", ...) {
+  .output_file_name <- paste0("PCA", "title_", title, "center_", center, "scale_", scale, ..., ".html")
+  rmarkdown::render("PCA.Rmd",
+    output_file = .output_file_name,
+    quiet = T,
+    params = list(
+      center = center,
+      scale = scale, 
+      title = title
+    )
+    # params=.params,
+    # envir = globalenv(),
+    # envir = new_env
+    # documentation=1,
+  )
+  return(.output_file_name)
+  # c(params$ROOTPATH, .output_file_name) %>% fs::path_join() %>% fs::path_abs()
+}
+```
+
+```{r, label="phos-pca-make-prof", echo=T, eval=F}
+# TODO: allow customization
+gct <- prof
+
+.center <- T
+.scale <- T
+
+gct <- prof
+.out <- render_pca_report(center = .center, scale = T,
+                          color = "genotype",
+                          title="prof")
+```
+LINK
+```{r, label="pca-report-1-html-pagetest", echo=F, results="asis", eval=F}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+## {-}
+```
+
+```{r, label="phos-pca-make-phos", echo=T, eval=F}
+gct <- phos
+.out <- render_pca_report(center = .center, scale = T,
+                          color = "genotype",
+                          title="phos")
+
+# html
+# .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+
+# htmltools::includeHTML(.out)
+```
+
+LINK
+```{r, label="pca-report-2-html-pagetest", echo=F, results="asis", eval=F}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+## {-}
+```
+
+# end
+
+
+## examine particular sites
+
+
+
+```{r, label='phos-makeptable'}
 make_p_table <- function(geneid){
   geneid <- geneid
   prof_expression_data <- mat(prof)[geneid,]
@@ -171,7 +605,8 @@ make_p_table <- function(geneid){
   DT::datatable(.psites)
 }
 ```
-```{r, label='phos.geneid'}
+
+```{r, label='phos-geneid-selection'}
   geneid <- "38418"
   make_p_table(geneid)
 

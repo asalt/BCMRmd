@@ -15,9 +15,33 @@ dist_no_na <- function(mat) {
   edist <- dist(mat)
   return(edist)
 }
-make_new_gct <- function(gct, mat) {
+make_new_gct <- function(gct, mat, cdesc=NULL, rdesc=NULL, cid=NULL, rid=NULL) {
   # make a new gct object with the same metadata as the original
-  new("GCT", mat = mat, rid = gct@rid, cid = gct@cid, rdesc = gct@rdesc, cdesc = gct@cdesc, )
+  #browser()
+
+  if (is.null(cdesc)) {
+    .cdesc <- gct@cdesc
+  } else {
+    .cdesc <- cdesc
+  }
+  if (is.null(cid)) {
+    .cid <- gct@cid
+  } else {
+    .cid <- cid
+  }
+  if (is.null(rdesc)) {
+    .rdesc <- gct@rdesc
+  } else {
+    .rdesc <- rdesc
+  }
+  if (is.null(rid)) {
+    .rid <- gct@rid
+  } else {
+    .rid <- rid
+  }
+  #browser()
+
+  new("GCT", mat = mat, rid = .rid, cid = .cid, rdesc = .rdesc, cdesc = .cdesc, )
 }
 recycle_colors <- function(type = "qual", n = 8) {
   # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))

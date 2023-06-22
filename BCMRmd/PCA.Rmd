@@ -9,6 +9,13 @@ output:
     includes:
       #in_header: header.html 
 params:
+  color:
+    value:
+  marker:
+    value:
+  title:
+    value:
+      PCA
   center:
     value:
       true
@@ -39,6 +46,9 @@ knitr::opts_chunk$set(warning = params$logging$WARNING)
 ```
 
 
+```{r}
+params$title
+```
 
 
 ```{r, label=pca-environment, include=F}
@@ -66,6 +76,11 @@ if (!exists("gct")) {
 }
 ```
 
+```{r, label=pca-gct-show}
+gct
+```
+
+
 
 ```{r, label=pca-begin}
 # from https://www.bioconductor.org/packages/release/bioc/vignettes/PCAtools/inst/doc/PCAtools.html#conduct-principal-component-analysis-pca
@@ -91,6 +106,10 @@ if (!exists("gct")) {
       scale = !!.scale
     )
   )
+# drop anything that has a value of NaN. There probably should not be any Nans, but even if there are we will not deal with that here.
+.rescaled_gct_mat %>% filter(is.na(value))  # are there any?
+.rescaled_gct_mat[ is.na(.rescaled_gct_mat$value), 'value' ] <- 0
+#.rescaled_gct_mat %<>% filter(!is.na(value))
 .forpca <- .rescaled_gct_mat %>%
   mutate(id.x = as.character(id.x)) %>%
   pivot_wider(
@@ -109,11 +128,17 @@ if (!exists("gct")) {
   
   # make to gene symbols in the rdesc slot
 if (!(is.null(gct@rdesc))){
-  
- .rdesc <- gct@rdesc[rownames(.forpca), ] %>%
-   unite("concatenated_column", everything(), sep = "-") %>% 
-   pull(concatenated_column)
-  rownames(.forpca) <- .rdesc
+  if ("SiteName" %in% colnames(gct@rdesc))
+    .rdesc <- paste(gct@rdesc$SiteName, gct@rdesc$id)
+  else if ("GeneSymbol" %in% colnames(gct@rdesc))
+    .rdesc <- paste(gct@rdesc$id, gct@rdesc$GeneSymbol)  #ensure always is unique
+  else
+    .rdesc <- rownames(.forpca)
+   
+  rownames(.forpca) <- .rdesc 
+  # this is not working
+   #unite("concatenated_column", everything(), sep = "-") %>% 
+   #jpull(concatenated_column)
 }
 # browser()
 # cat(.forpca)
@@ -171,18 +196,23 @@ rownames(.metadata)
 #  get rom input
 if ("metavar1" %in% colnames(gct@cdesc)) .color_by <- "metavar1"
 # if ("avg.silhouette.width" %in% colnames(clusterings)) .var <- 'avg.silhouette.width'
-
-mybiplot <- function(.pcaobj, colby=NULL, legend=T, ...) {
+#colby <- params$color
+#shape <- params$marker
+colby = "genotype"
+mybiplot <- function(.pcaobj, colby="genotype", shape=shape, legend=T, ...) {
   #
   .do_legend <- ifelse(legend==T, "right", "none")
   print(.do_legend)
-  biplot(
+  .res <- biplot(
     .pcaobj,
     showLoadings = T,
     ntopLoadings = 5,
     sizeLoadingsNames = 2,
     hline = 0,
     vline = 0,
+    colby=colby,
+    # colby=colby,
+    #shape=shape,
     #colby = NULL,
     # colby="SampleType",
     # shape='OrganSite',
@@ -191,6 +221,7 @@ mybiplot <- function(.pcaobj, colby=NULL, legend=T, ...) {
     legendPosition = .do_legend,
     ...
   )
+  .res
 }
  #biplot(.pcaobj, colby="metavar1")
 ```
@@ -198,13 +229,15 @@ mybiplot <- function(.pcaobj, colby=NULL, legend=T, ...) {
 ### pca.biplot-1-2 
 
 ```{r, label=pca.biplot-1-2}
-mybiplot(.pcaobj, x = "PC1", y = "PC2", legend = F)
+mybiplot(.pcaobj, x = "PC1", y = "PC2", 
+         legend = T
+         )
 ```
 
 ### pca.biplot-1-3 
 
 ```{r, label=pca-biplot-1-3}
-mybiplot(.pcaobj, x = "PC1", y = "PC3", legend=F)
+mybiplot(.pcaobj, x = "PC1", y = "PC3", legend=T)
 # biplot(.pca,
 #        x="PC1",
 #        y="PC2",
@@ -223,18 +256,19 @@ mybiplot(.pcaobj, x = "PC1", y = "PC3", legend=F)
 
 ```{r, label=pca-biplot-2-3, fig.width=6, fig.height=6}
 
-mybiplot(.pcaobj, x = "PC2", y = "PC3", legend=F)
+mybiplot(.pcaobj, x = "PC2", y = "PC3", legend=T)
 # .pca %>% airsplot()
 ```
 ```{r, label=pca-loadings1,  fig.width=7, fig.height=7}
-myplotloadings <- function(.pcaobj, ...) {
-  plotloadings(
-    .pcaobj,
-    rangeRetain = .01,
-    ...
-  )
-}
-.pcaobj %>% myplotloadings(labSize = 3)
+# myplotloadings <- function(.pcaobj, ...) {
+#   plotloadings(
+#     .pcaobj,
+#     rangeRetain = .01,
+#     components = 10,
+#     ...
+#   )
+# }
+# .pcaobj %>% myplotloadings(labSize = 3)
 ```
 
 ### {-}
@@ -243,10 +277,19 @@ myplotloadings <- function(.pcaobj, ...) {
 
 
 ## PCA loadings { .tabset }
-## 
-```{r, label=pca-myplotloadings-rel, fig.width=7, fig.height=7}
+### Loading relative
+```{r, label=pca-myplotloadings-rel, fig.width=7, fig.height=7, echo=F}
+
+components <- seq(5)
+Nloadings <- 10
+pca_loadings <-  .pcaobj$loadings[, components]
+loadings_long <- as.vector(as.matrix(pca_loadings[,components]))  # select 5
+loadings_abs_sorted <- sort(abs(loadings_long), decreasing = FALSE)
+rangeRetain_value <- loadings_abs_sorted[Nloadings]
+
   plotloadings(.pcaobj,
-    rangeRetain = 0.01,
+               components = seq(5),
+    rangeRetain = rangeRetain_value,
     labSize = 4.0,
     title = 'Loadings plot',
     subtitle = 'PC1, PC2, PC3, PC4, PC5',
@@ -257,10 +300,19 @@ myplotloadings <- function(.pcaobj, ...) {
 #.pcaobj %>% myplotloadings(labSize = 3, absolute = F)
 ```
 
-plotloadings absolute
-```{r, label=pca-myplotloadings-abs, fig.width=7, fig.height=7}
+### Loadings absolute
+```{r, label=pca-myplotloadings-abs, fig.width=7, fig.height=7, echo=F, include=F, eval=F}
+
+components <- seq(5)
+Nloadings <- 10
+pca_loadings <-  .pcaobj$loadings[, components]
+loadings_long <- as.vector(as.matrix(pca_loadings[,components]))  # select 5
+loadings_abs_sorted <- sort(abs(loadings_long), decreasing = FALSE)
+rangeRetain_value <- loadings_abs_sorted[Nloadings]
+
   plotloadings(.pcaobj,
-    rangeRetain = 0.01,
+               components = components,
+    rangeRetain = rangeRetain_value,
     labSize = 4.0,
     title = 'Loadings plot',
     subtitle = 'PC1, PC2, PC3, PC4, PC5',
@@ -271,45 +323,71 @@ plotloadings absolute
     drawConnectors = TRUE)
 #.pcaobj %>% myplotloadings(labSize = 3, absolute = F)
 ```
+##  break
+
 ## Loadings one at a time { .tabset }
 
 ### PCA1
-```{r label='pca-loading1'}
+```{r, label='pca-loading1', eval=T, include=T}
 # this could be made dynamically
-.component <- 1
- plotloadings(.pcaobj,
-    components = getComponents(.pcaobj, c(.component)),
-    rangeRetain = 0.05, absolute = TRUE,
-    col = c('black', 'pink', 'red4'),
-    drawConnectors = TRUE, labSize = 4) + coord_flip()
+component <- 1
+Nloadings <- 10
+pca_loadings <-  .pcaobj$loadings[, component]
+loadings_long <- pca_loadings # only one
+#loadings_long <- as.vector(as.matrix(pca_loadings[,components]))  # select 5
+loadings_abs_sorted <- sort(abs(loadings_long), decreasing = FALSE)
+rangeRetain_value <- loadings_abs_sorted[Nloadings]
+
+plotloadings(.pcaobj,
+   components = getComponents(.pcaobj, c(component)),
+   rangeRetain = rangeRetain_value,
+   absolute = TRUE,
+   col = c('black', 'pink', 'red4'),
+   drawConnectors = TRUE, labSize = 4) + coord_flip()
 ```
 ### PCA2
-```{r label='pca-loading2'}
+```{r, label='pca-loading2', eval=T, include=T}
 # this could be made dynamically
-.component <- 1
- plotloadings(.pcaobj,
-    components = getComponents(.pcaobj, c(.component)),
-    rangeRetain = 0.05, absolute = TRUE,
-    col = c('black', 'pink', 'red4'),
-    drawConnectors = TRUE, labSize = 4) + coord_flip()
+component <- 2
+Nloadings <- 10
+pca_loadings <-  .pcaobj$loadings[, component]
+loadings_long <- pca_loadings # only one
+#loadings_long <- as.vector(as.matrix(pca_loadings[,components]))  # select 5
+loadings_abs_sorted <- sort(abs(loadings_long), decreasing = FALSE)
+rangeRetain_value <- loadings_abs_sorted[Nloadings]
+
+plotloadings(.pcaobj,
+   components = getComponents(.pcaobj, c(component)),
+   rangeRetain = rangeRetain_value,
+   absolute = FALSE,
+   col = c('black', 'pink', 'red4'),
+   drawConnectors = TRUE, labSize = 4) + coord_flip()
 ```
 
 ### PCA3
-```{r label='pca-loading3'}
+```{r, label='pca-loading3', eval=T, include=T}
 # this could be made dynamically
-.component <- 1
- plotloadings(.pcaobj,
-    components = getComponents(.pcaobj, c(.component)),
-    rangeRetain = 0.05, absolute = TRUE,
-    col = c('black', 'pink', 'red4'),
-    drawConnectors = TRUE, labSize = 4) + coord_flip()
+component <- 3
+Nloadings <- 10
+pca_loadings <-  .pcaobj$loadings[, component]
+loadings_long <- pca_loadings # only one
+#loadings_long <- as.vector(as.matrix(pca_loadings[,component]))  # select 5
+loadings_abs_sorted <- sort(abs(loadings_long), decreasing = FALSE)
+rangeRetain_value <- loadings_abs_sorted[Nloadings]
+
+plotloadings(.pcaobj,
+   components = getComponents(.pcaobj, c(component)),
+   rangeRetain = rangeRetain_value,
+   absolute = FALSE,
+   col = c('black', 'pink', 'red4'),
+   drawConnectors = TRUE, labSize = 4) + coord_flip()
 ```
 
 ## { - }
 
 
 
-```{r, label='pca-misc-loadings'}
+```{r, label='pca-misc-loadings', eval=F}
 # p <- .pcaobj
 #  plotloadings(p,
 #     components = getComponents(p, c(4,9,3)),
@@ -327,7 +405,7 @@ plotloadings absolute
 ###
 
 
-```{r label=pca-empty}
+```{r, label=pca-empty}
 # not sure what this means for non-numeric
 # .p %>% eigencorplot(
 #   metavars = c(
@@ -342,36 +420,37 @@ plotloadings absolute
  
  
 ```{r, pca-toploadings-heatmap, eval=F, include=F}
-library(ComplexHeatmap)
-.negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate")
-.column_df <- .gct@cdesc %>% select(-any_of(.negsel))
 
-recycle_colors <- function(type = "qual", n = 8) {
-  # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
-  original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
-  recycled_palette <- rep_len(original_palette, length.out = n)
-  return(recycled_palette)
-}
-#
-# .color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
-
-
-.color_list <- .column_df %>%
-  as.list() %>%
-  map(~ recycle_colors(n = length(unique(.))))
-# fix this maybe if better
-for (col in colnames(.column_df)) {
-  # print(col)
-  # names(.color_list[[col]]) <-  unique(.column_df[[col]])
-  names(.color_list[[col]]) <- unique(.column_df[[col]])
-}
-
-
-.top_annotation <- columnAnnotation(
-  df = .column_df %>% as.data.frame(),
-  col = .color_list
-  # col = anno_block(gp = gpar(fill = .color_list$metavar1))
-)
+# library(ComplexHeatmap)
+# .negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate")
+# .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
+# 
+# recycle_colors <- function(type = "qual", n = 8) {
+#   # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
+#   original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
+#   recycled_palette <- rep_len(original_palette, length.out = n)
+#   return(recycled_palette)
+# }
+# #
+# # .color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
+# 
+# 
+# .color_list <- .column_df %>%
+#   as.list() %>%
+#   map(~ recycle_colors(n = length(unique(.))))
+# # fix this maybe if better
+# for (col in colnames(.column_df)) {
+#   # print(col)
+#   # names(.color_list[[col]]) <-  unique(.column_df[[col]])
+#   names(.color_list[[col]]) <- unique(.column_df[[col]])
+# }
+# 
+# 
+# .top_annotation <- columnAnnotation(
+#   df = .column_df %>% as.data.frame(),
+#   col = .color_list
+#   # col = anno_block(gp = gpar(fill = .color_list$metavar1))
+# )
 
 # col = .color_list )
 

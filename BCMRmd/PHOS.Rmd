@@ -11,18 +11,23 @@ output:
 
 params:
   PROF:
-    value: "MSPC000967_TMT10_prof_Config_data_gct_linear_all_1more_nonzero_normtype_none_n10x7507.gct"
+    #value: "MSPC000967_TMT10_prof_Config_data_gct_linear_all_1more_nonzero_normtype_none_n10x7507.gct"
+    value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_median_n10x7507.gct"
     description: "gct file for one profiling experiment"
-  PROF_correct:
-    value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_median_n10x7507.gct" 
-    description: "gct file for one profiling experiment"
+  PROF_PATH:
+    value: "./exports/prof"
+
+    description: "directory location for profiling gct files"
   PHOS:
     value: "51963_1_6_site_table_nr.tsv_n10x14785.gct"
     description: "gct file for one phosphoprofiling experiment"
-  ROOTPATH: 
+  PHOS_PATH:
+    value: "IMAC/"
+    description: "directory location for phos gct files"
+
+  ROOTPATH:
     #value: "`normalizePath(dirname('.'))`"
-    value: "~/Documents/MSPC000967/"
-    description: supposed to be dynamic
+    value: "/media/alex/20230612/MSPC000936/MSPC000936/"
   paramfile:
     value: ""
   cluster_methods:
@@ -37,7 +42,7 @@ params:
         value: true
       center:
         value: true
-      scale: 
+      scale:
         value:
           true
   cluster:
@@ -56,7 +61,7 @@ params:
       clustering_method_rows:
         value: ward.d2
       legend_include:
-        value: 
+        value:
         description: "metadata variables to include"
       legend_exclude:
         value:
@@ -67,8 +72,8 @@ params:
       warning: TRUE
       quiet: TRUE
 end:
-# 
-  
+#
+
 ---
 
 
@@ -103,20 +108,86 @@ mykable <- function(data) {
 
 ```{r, label="phos.load"}
 ROOTPATH<- fs::path_abs(params$ROOTPATH)
-ROOTPATH %>% print
+PROF_PATH <- fs::path(ROOTPATH, params$PROF_PATH)
+PHOS_PATH <- fs::path(ROOTPATH, params$PHOS_PATH)
+PHOS_PATH <- fs::path_abs(params$PHOS_PATH)
 
-prof_gct <- params$PROF
-prof_gct_correct <- params$PROF_correct
-phos_gct <- params$PHOS
+prof_files <- PROF_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
 
-prof_correct <- file.path(ROOTPATH, prof_gct_correct) %>% cmapR::parse_gctx()
-prof <- file.path(ROOTPATH, prof_gct) %>% cmapR::parse_gctx()
-phos <- file.path(ROOTPATH, phos_gct) %>% cmapR::parse_gctx()
+phos_files <- PHOS_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
+phos_gcts <- phos_files %>% purrr::map(cmapR::parse_gctx)
+# need to remove sample identifying info that is in the rdesc
+cols_to_drop <- c("recno", "runno", "searchno", "basename", "TopScore")
+phos_gcts <- purrr::map(phos_gcts, function(gct) {
+  gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
+  return(gct)
+})
 
-# prof <- cmapR::parse_gctx(prof_gct)
-# phos <- cmapR::parse_gctx(phos_gct)
+
+#gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
+
+#phos_gcts %<>% purrr::map(~cmapR::subset_gct())
+# filter out not STY aa modi
+phos_gcts_f <- phos_gcts %>%  purrr::map(~cmapR::subset_gct(., rid = .@rdesc%>%dplyr::filter(AA %in% c("S", "T", "Y")) %>% rownames)  )
+phos_gct_merged <- base::Reduce(accumulate=F,
+                    f=function(...) cmapR::merge_gct(..., dim="col"),
+                    x=phos_gcts_f
+)
+
+#phos_gcts %>% map(~.@cid)
+#jphos_gcts %>% map(~ .@cdesc %>% head(2))
+
+                    #x=phos_gcts[2:length(phos_gcts)],
+                    #init = phos_gcts[[1]]
+
+cidcounts <- phos_gct_merged %>% melt_gct %>% group_by(recno, runno, searchno) %>% summarise(count=n_distinct(id.y))
+ridcounts <- phos_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count=n_distinct(id.y))
+.maxval <- 30
+.maxval <- max(ridcounts$count)
+rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
+
+phos_gct <- subset_gct(phos_gct_merged, rid=rids_filtered)
+
 ```
 ## add metadata
+
+
+```{r}
+dfm <- phos_gct %>% melt_gct()
+dfm %<>% group_by(id.y) %>%
+  mutate(mednorm=value / median(value, na.rm=TRUE)) %>%
+  mutate(logmednorm=log(mednorm+1)) %>%
+  ungroup() %>%
+  group_by(id.x) %>%
+  mutate(zscore=scale(logmednorm, center=T, scale=F)) %>%
+  ungroup
+
+mat <- dfm %>% pivot_wider(id_cols=id.x, names_from=id.y, values_from=logmednorm ) %>% as.data.frame
+rownames(mat) <- mat$id.x
+mat$id.x <- NULL
+#colnames(mat)
+
+batchinfo <- phos_gct@cdesc %>% mutate(id=factor(id, levels=colnames(mat), ordered=TRUE)) %>% arrange(id)
+batchvar <- batchinfo$recno %>% as.character()
+mat_combat <- sva::ComBat(mat, batchvar)
+phos_gct_batch <- phos_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+
+
+.tmp <- phos_gct_batch %>%
+  melt_gct() %>%
+  group_by(id.x) %>%
+  mutate(zscore=myzscore(value)) %>%
+  ungroup()
+mat_zscore <- .tmp %>%  pivot_wider(id_cols=id.x, names_from=id.y, values_from=zscore) %>% as.data.frame
+rownames(mat_zscore) <- mat_zscore$id.x
+mat_zscore$id.x <- NULL
+mat_zscore <- as.matrix(mat_zscore)
+
+phos_gct_zscore <- phos_gct_batch %>% cmapR::GCT(mat = mat_zscore, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+```
+
+
+# end July 19
 
 ```{r, label='phos.manual-metadata', eval=T}
 .res<-left_join(prof@rdesc,
@@ -147,8 +218,8 @@ rownames(.phos_sample_metadata) <- .phos_sample_metadata$id
 #out <- .phos_metadata %>% left_join(prof@cdesc, by = "id")
 .the_order_we_want <- colnames(mat(phos))
 .newnames <- .phos_sample_metadata %>%
-   mutate(id=factor(id, levels(.the_order_we_want), ordered = T)) %>% 
-   arrange(id) %>% 
+   mutate(id=factor(id, levels(.the_order_we_want), ordered = T)) %>%
+   arrange(id) %>%
    pull(name)
 rownames(.phos_sample_metadata) <- .newnames
 .phos_sample_metadata$id <- rownames(.phos_sample_metadata)
@@ -171,7 +242,7 @@ colnames(.new) <- .newnames
     #rid=rownames(.new),
     rid=.rid,
     rdesc=.rdesc,
-    ) 
+    )
 # subset_gct(phos)
 # subset_gct(.phos)
 phos <- .phos
@@ -192,7 +263,7 @@ print(head(mat(phos)))
 
 ## preview metadata
  prof
- 
+
 ```{r, label="phos-prof-mat"}
 mat(prof) %>% head %>% mykable()
 ```
@@ -202,8 +273,8 @@ prof@cdesc %>% mykable()
 ```
 
 
- phos 
- 
+ phos
+
 ```{r, label="phos-phos-mat"}
 mat(phos) %>% head %>% mykable()
 ```
@@ -230,7 +301,7 @@ phos <-.phos
 ### prof
 ```{r, label='phos-dist1', eval=F}
 prof %>% melt_gct() %>%
-  mutate(logvalue = log(value)) %>% 
+  mutate(logvalue = log(value)) %>%
   ggviolin(x="id.y", y="logvalue", add = "median_mad")  %>%
   ggpar(x.text.angle=90)
 
@@ -238,9 +309,9 @@ prof %>% melt_gct() %>%
 
 ### prof log mednorm
 ```{r, label='phos-dist2', cache=T, eval=F}
-prof %>% melt_gct() %>% 
-  mutate(logvalue = log(value)) %>% 
-  group_by(id.y) %>% 
+prof %>% melt_gct() %>%
+  mutate(logvalue = log(value)) %>%
+  group_by(id.y) %>%
   mutate(logvalue_mednorm = logvalue-median(logvalue, na.rm=T)) %>%
   ggviolin(x="id.y", y="logvalue_mednorm", add="mean_sd") %>%
   ggpar(x.text.angle=90)
@@ -248,9 +319,9 @@ prof %>% melt_gct() %>%
 
 ### prof mednorm log
 ```{r, label='phos-dist3', cache=T, eval=F}
-prof %>% melt_gct() %>% 
+prof %>% melt_gct() %>%
   mutate(value_mednorm = value/median(value, na.rm=T)) %>%
-  mutate(logvalue_mednorm_div = log(value_mednorm)) %>% 
+  mutate(logvalue_mednorm_div = log(value_mednorm)) %>%
   ggviolin(x="id.y", y="logvalue_mednorm_div", add="mean_sd") %>%
   ggpar(x.text.angle=90)
 
@@ -278,9 +349,9 @@ phos %>% melt_gct() %>%
 ### phos log mednorm
 
 ```{r, label='phos-dist6', eval=F}
-phos %>% melt_gct() %>% 
-  mutate(logvalue = log(value)) %>% 
-  group_by(id.y) %>% 
+phos %>% melt_gct() %>%
+  mutate(logvalue = log(value)) %>%
+  group_by(id.y) %>%
   mutate(logvalue_mednorm = logvalue-median(logvalue, na.rm=T)) %>%
   ggviolin(x="id.y", y="logvalue_mednorm", add="mean_sd") %>%
   ggpar(x.text.angle=90)
@@ -289,10 +360,10 @@ phos %>% melt_gct() %>%
 
 ### phos mednorm log
 ```{r, label='phos-dist7'}
-phos %>% melt_gct() %>% 
-  group_by(id.y) %>% 
+phos %>% melt_gct() %>%
+  group_by(id.y) %>%
   mutate(value_mednorm = value/median(value, na.rm=T)) %>%
-  mutate(logvalue_mednorm_div = log(value_mednorm)) %>% 
+  mutate(logvalue_mednorm_div = log(value_mednorm)) %>%
   ggviolin(x="id.y", y="logvalue_mednorm_div", add="mean_sd") %>%
   ggpar(x.text.angle=90)
 
@@ -310,40 +381,55 @@ phos %>% melt_gct() %>%
 # prof %>% melt_gct() %>% group_by(id.y) %>% summarise(median(value))
 
 .min_nonzero <- mat(prof)[ mat(prof) > 0 ] %>% min
-  #mutate(value = (value/.min_nonzero)+.min_nonzero) %>% 
+.min_nonzero<-0
+  #mutate(value = (value/.min_nonzero)+.min_nonzero) %>%
 
+.medvals <- prof %>% melt_gct() %>% group_by(id.y) %>%
+  summarise(medval = median(value, na.rm=T))
+
+.medvals <- prof %>% melt_gct() %>% filter(value > 0) %>% group_by(id.y) %>%
+  summarise(medval = median(value, na.rm=T))
+
+# .quantilevals <- prof %>% melt_gct() %>% filter(value > 0) %>% group_by(id.y) %>%
+#   summarise(medval = quantile(value, na.rm=T, probs = .5, names = F))
+
+  #mutate(value_mednorm = (value+.min_nonzero*.01)/median(value, na.rm=T)) %>%
 .normalized_prof_matrix <- prof %>%
-  melt_gct %>%
+  melt_gct() %>%
+  left_join(.medvals, by = 'id.y') %>%
   group_by(id.y) %>%
-  mutate(value_mednorm = (value+.min_nonzero)/median(value, na.rm=T)) %>% 
-  ungroup() %>% 
-  mutate(value_mednorm_log=log10(value_mednorm)) %>% 
+    mutate(value_mednorm = value / medval) %>%
+  ungroup() %>%
+  mutate(value_mednorm_log=log10(value_mednorm)) %>%
   group_by(id.x) %>%
-  mutate(zscore = myzscore(value_mednorm_log)) %>% 
+  mutate(zscore = myzscore(value_mednorm_log)) %>%
   ungroup()
-  #mutate(value_mednorm_log = value_log-median(value_log, na.rm=T) ) %>% 
-  #mutate(zscore=scale(value_mednorm_log)) %>% 
+  #mutate(value_mednorm_log = value_log-median(value_log, na.rm=T) ) %>%
+  #mutate(zscore=scale(value_mednorm_log)) %>%
   #mutate(value_mednorm=value/median(value, na.rm=T)) %>%
  # ggviolin(x='id.y', y='zscore')
-.normalized_prof_matrix
+# .normalized_prof_matrix
 
-.prof_correct_mat_wide <- prof_correct %>% melt_gct() %>% 
-  group_by(id.x) %>% 
-  mutate(zscore=myzscore(value)) %>% 
-  ungroup() %>% 
+.prof_correct_mat_wide <- prof_correct %>% melt_gct() %>%
+  group_by(id.x) %>%
+  mutate(zscore=myzscore(value)) %>%
+  ungroup() %>%
   pivot_wider(id_cols=id.x,
    values_from=zscore,
    names_from = id.y
    ) %>% as.data.frame()
+rownames(.prof_correct_mat_wide) <- .prof_correct_mat_wide$id.x
 .prof_correct_mat_wide$id.x <- NULL # delete
+.prof_correct_mat_wide <- as.matrix(.prof_correct_mat_wide)
 
 prof_correct_zscore <- new("GCT",
-  mat = as.matrix(.prof_correct_mat_wide),
-  rid = prof@rid,
-  cid = prof@cid,
-  rdesc = prof@rdesc,
-  cdesc = prof@cdesc
+  mat = .prof_correct_mat_wide[prof_correct@rid, prof_correct@cid],
+  rid = prof_correct@rid,
+  cid = prof_correct@cid,
+  rdesc = prof_correct@rdesc,
+  cdesc = prof_correct@cdesc
   )
+
 
 .normalized_prof_matrix_wide_log <- .normalized_prof_matrix %>%
   pivot_wider(id_cols=id.x,
@@ -352,6 +438,7 @@ prof_correct_zscore <- new("GCT",
    ) %>% as.data.frame()
 rownames(.normalized_prof_matrix_wide_log) <- .normalized_prof_matrix_wide_log$id.x
 .normalized_prof_matrix_wide_log$id.x <- NULL # delete
+.normalized_prof_matrix_wide_log <- as.matrix(.normalized_prof_matrix_wide_log)
 
 
 .normalized_prof_matrix_wide_zscore <- .normalized_prof_matrix %>%
@@ -362,18 +449,23 @@ rownames(.normalized_prof_matrix_wide_log) <- .normalized_prof_matrix_wide_log$i
 
 rownames(.normalized_prof_matrix_wide_zscore) <- .normalized_prof_matrix_wide_zscore$id.x
 .normalized_prof_matrix_wide_zscore$id.x <- NULL # delete
+.normalized_prof_matrix_wide_zscore <- as.matrix(.normalized_prof_matrix_wide_zscore)
 
 prof_zscore <- new("GCT",
-  mat = as.matrix(.normalized_prof_matrix_wide_zscore),
+  mat = .normalized_prof_matrix_wide_zscore[prof@rid, prof@cid],
   rid = prof@rid,
   cid = prof@cid,
   rdesc = prof@rdesc,
   cdesc = prof@cdesc
   )
 
+prof_correct_zscore %>% melt_gct() %>% filter(id.x=="10178909")
+prof_zscore %>% melt_gct() %>% filter(id.x=="10178909")
+prof_zscore %>% melt_gct() %>% filter(id.x=="10178909") %>% pivot_wider(values_from = value, names_from = id.y, id_cols = id.x)
+prof_correct_zscore %>% melt_gct() %>% filter(id.x=="10178909") %>% pivot_wider(values_from = value, names_from = id.y, id_cols = id.x)
 
 prof_log <- new("GCT",
-  mat = as.matrix(.normalized_prof_matrix_wide_log),
+  mat = as.matrix(.normalized_prof_matrix_wide_log)[prof@rid, prof@cid],
   rid = prof@rid,
   cid = prof@cid,
   rdesc = prof@rdesc,
@@ -384,23 +476,43 @@ prof_log <- new("GCT",
 
 ## heatmap def
 ```{r, label='phos-heatmap-def'}
-make_heatmap <- function(.gct){
-  .negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate", "name")
+make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
+  .negsel <- c("sample", "plex", "recno", "id", "runno", "searchno", "assay", "replicate", "name",
+               "lu",
+               "ProtocolNo",
+               "Washes",
+               "Date",
+               "Experimenter",
+               "X1",
+               "X1Detail",
+               "X2",
+               "X2Detail",
+               "X1.1",
+               "X1Detail.1",
+               "X2.1",
+               "X2Detail.1",
+               "X1.2",
+               "X1Detail.2",
+               "X2.2",
+               "X2Detail.2"
+               )
   .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
+  if (!is.null(pos_sel))
+    .column_df <- .gct@cdesc %>% select(any_of(pos_sel))
 
   library(ComplexHeatmap)
-  
+
   recycle_colors <- function(type = "qual", n = 8) {
     # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
     original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
     recycled_palette <- rep_len(original_palette, length.out = n)
     return(recycled_palette)
   }
-  
+
   .color_list <- .column_df %>%
     as.list() %>%
     map(~ recycle_colors(n = length(unique(.))))
-  
+
   # fix this maybe if better
   for (col in colnames(.column_df)) {
     # print(col)
@@ -422,10 +534,10 @@ make_heatmap <- function(.gct){
   # colnames(mat_zscore) <- colnames(mat(.gct))  # Save column names as row names before transpose
   # mat_zscore <- mat_zscore[, rownames(.column_df)]
   #mat_zscore = mat_zscore[, rownames(.column_df)]
-  
+
   #mat_zscore <- mat_zscore[, rownames(.column_df)] # make sure order is the same
   mat <- mat(.gct)
-  mat <- mat[, rownames(.column_df)]
+  mat <- mat[, .gct@cdesc$id] # make sure same order
 
   .h <- ComplexHeatmap::Heatmap(
     mat,
@@ -437,11 +549,12 @@ make_heatmap <- function(.gct){
     column_title_side = "top",
     column_title_rot = 0,
     column_names_gp = gpar(fontsize = 9),
+    row_names_gp = gpar(fontsize=6),
     border = TRUE,
     use_raster = T,
-    show_row_names = F,
+    show_row_names = show_row_names,
     show_row_dend = T,
-    
+
   )
   .h
 }
@@ -449,13 +562,31 @@ make_heatmap <- function(.gct){
 
 
 ```{r}
-make_heatmap(prof_correct_zscore)
+cols_to_annotate <- c("CellTissue", "Genotype")
+cols_to_annotate <- c("Genotype", "recno")
+# make_heatmap(phos_gct_batch, pos_sel = cols_to_annotate)
+make_heatmap(phos_gct_zscore, pos_sel = cols_to_annotate)
 ```
+
 
 
 ```{r}
-make_heatmap(prof_log)
+prof_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
 ```
+
+```{r}
+prof_correct_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
+```
+
+```{r}
+mat(prof_correct_zscore) %>%
+  Heatmap(show_row_dend = F, show_row_names = F)
+```
+
+```{r}
+make_heatmap(prof_correct_zscore)
+```
+
 
 ```{r}
 make_heatmap(prof_zscore)
@@ -463,34 +594,44 @@ make_heatmap(prof_zscore)
 
 
 ```{r, label='phos-normalize-expr-matrix2', echo=F, eval=T}
-.normalized_phos_matrix <- phos %>% melt_gct() %>% 
-  group_by(id.y) %>% 
-  mutate(value_mednorm = value / median(value, na.rm=T)) %>% 
-  ungroup() %>% 
-  mutate(logvalue_mednorm = log(value_mednorm)) %>% 
-  group_by(id.x) %>% 
+.normalized_phos_matrix <- phos %>% melt_gct() %>%
+  group_by(id.y) %>%
+  mutate(value_mednorm = value / median(value, na.rm=T)) %>%
+  ungroup() %>%
+  mutate(logvalue_mednorm = log(value_mednorm)) %>%
+  group_by(id.x) %>%
   mutate(zscore=myzscore(logvalue_mednorm))
 
 .normalized_phos_matrix_wide_zscore <- .normalized_phos_matrix %>%
-  pivot_wider(id_cols=id.x, values_from=zscore, names_from = id.y ) %>% 
+  pivot_wider(id_cols=id.x, values_from=zscore, names_from = id.y ) %>%
   as.data.frame()
-
-
 rownames(.normalized_phos_matrix_wide_zscore) <- .normalized_phos_matrix_wide_zscore$id.x
 .normalized_phos_matrix_wide_zscore$id.x <- NULL # delete
 
 #mat(phos) <- .normalized_phos_matrix %>% as.matrix
+.normalized_phos_matrix_wide_log <- .normalized_phos_matrix %>%
+  pivot_wider(id_cols=id.x, values_from=logvalue_mednorm, names_from = id.y ) %>%
+  as.data.frame()
+rownames(.normalized_phos_matrix_wide_log) <- .normalized_phos_matrix_wide_log$id.x
+.normalized_phos_matrix_wide_log$id.x <- NULL # delete
 
 phos_zscore <- new("GCT",
-  mat = as.matrix(.normalized_phos_matrix_wide_zscore),
+  mat = as.matrix(.normalized_phos_matrix_wide_zscore)[phos@rid, phos@cid],
   rid = phos@rid,
   cid = phos@cid,
   rdesc = phos@rdesc,
   cdesc = phos@cdesc
   )
 
+phos_log <- new("GCT",
+  mat = as.matrix(.normalized_phos_matrix_wide_log)[phos@rid, phos@cid],
+  rid = phos@rid,
+  cid = phos@cid,
+  rdesc = phos@rdesc,
+  cdesc = phos@cdesc
+  )
 
-#phos %>% melt_gct() %>% group_by(id.y) %>% mutate(value_mednorm=log(value/median(value,na.rm=T))) %>% 
+#phos %>% melt_gct() %>% group_by(id.y) %>% mutate(value_mednorm=log(value/median(value,na.rm=T))) %>%
 #  ggviolin(x='id.y', y='value_mednorm')
 phos_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
 ```
@@ -518,7 +659,7 @@ print(phos@cid)
 print(head(mat(phos)))
 ```
 
-# 
+#
 
 # PCA
 render PCA.Rmd
@@ -535,7 +676,7 @@ render_pca_report <- function(center = T, scale = F, title="PCA", ...) {
     quiet = T,
     params = list(
       center = center,
-      scale = scale, 
+      scale = scale,
       title = title
     )
     # params=.params,
@@ -587,7 +728,6 @@ LINK
 ## {-}
 ```
 
-# end
 
 
 ## examine particular sites
@@ -615,4 +755,95 @@ make_p_table <- function(geneid){
 
 
 
+# Differential Analysis
+## Differential Analysis
+###limma
 
+```{r}
+
+
+mod <- model.matrix(~0 + genotype, phos@cdesc)
+colnames(mod) <- make.names(colnames(mod)) #where is this used
+limma_input <- mat(phos_log)
+limma_input <- limma_input[apply(limma_input, 1, function(row) all(row != -Inf)), ]
+limma_input <- limma_input[ ,rownames(mod) ]
+
+# Select rows where all values are not -Inf
+
+
+contrast_list <- c(
+  "genotypeIntS6 - genotypeWT",
+  "genotypeIntS12 - genotypeWT",
+  "genotypeIntS6 - genotypeIntS12",
+  #"genotypeIntS6 + genotypeIntS12"
+  )
+contrasts <- makeContrasts(contrasts=contrast_list, levels = mod) #need to make variable contrast def
+
+prefit <- lmFit(limma_input, mod)
+fit <- contrasts.fit(prefit, contrasts) %>% eBayes(trend = T, robust = T)
+```
+
+
+```{r}
+limma_res <- purrr::map_dfr(
+  colnames(contrasts),
+  ~ topTable(fit, n=Inf, sort.by="none", coef=.x, confint = F  ) %>%
+  rownames_to_column("GeneIDSite") %>%
+  mutate(contrast=.x)
+)
+.file <- file.path(ROOTPATH, "MSPC000967_limma_res.tsv")
+limma_res %>% write_tsv(.file)
+# %>%
+  #rownames_to_column("GeneIDSite") %>%
+  #tibble() %>%
+  #arrange(contrast, P.Value) #move from here to plot topN
+
+#limma_res %>% head(20)
+```
+
+
+## top50 { .tabset }
+
+### ints6 vs wt
+
+```{r, fig.width=10, fig.height=9}
+.c <- "genotypeIntS6 - genotypeWT"
+.top50 <- limma_res %>%
+  filter(contrast == .c) %>%
+  arrange(P.Value) %>%
+  head(75)
+
+
+subset_gct(phos_zscore, rid=.top50$GeneIDSite) %>% make_heatmap(show_row_names=T)
+
+```
+
+### ints12 vs wt
+
+```{r, fig.width=10, fig.height=9}
+.c <- "genotypeIntS12 - genotypeWT"
+.top50 <- limma_res %>%
+  filter(contrast == .c) %>%
+  arrange(P.Value) %>%
+  head(75)
+
+
+subset_gct(phos_zscore, rid=.top50$GeneIDSite) %>% make_heatmap(show_row_names=T)
+
+```
+
+
+
+
+
+```{r, fig.width=10, fig.height=9}
+.c <- "genotypeIntS6 - genotypeIntS12"
+.top50 <- limma_res %>%
+  filter(contrast == .c) %>%
+  arrange(P.Value) %>%
+  head(75)
+
+
+subset_gct(phos_zscore, rid=.top50$GeneIDSite) %>% make_heatmap(show_row_names=T)
+
+```

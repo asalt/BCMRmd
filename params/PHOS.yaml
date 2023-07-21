@@ -1,0 +1,69 @@
+ROOTPATH:
+  value: "/media/alex/20230612/MSPC000936/MSPC000936/"
+  description: "rootpath"
+PROF:
+  #value: "MSPC000967_TMT10_prof_Config_data_gct_linear_all_1more_nonzero_normtype_none_n10x7507.gct"
+  value: "MSPC000967_TMT10_prof_Config_data_gct_all_1more_nonzero_normtype_median_n10x7507.gct"
+  description: "gct file for one profiling experiment"
+PROF_PATH:
+  value: "prof/"
+  description: "directory location for profiling gct files"
+PHOS:
+  value: "51963_1_6_site_table_nr.tsv_n10x14785.gct"
+  description: "gct file for one phosphoprofiling experiment"
+PHOS_PATH:
+  value: "IMAC/"
+  description: "directory location for phos gct files"
+paramfile:
+  value: ""
+cluster_methods:
+  value: [kmeans]
+batchcorrection:
+  do_batch_correction:
+    value: true
+  batchvar:
+    value: "recno"
+    description:
+  parametric:
+    value: true
+
+
+pca:
+  value:
+    color:
+      value:
+    marker:
+      value:
+    annotate:
+      value: true
+    center:
+      value: true
+    scale:
+      value:
+        true
+cluster:
+  value:
+    cluster_rows:
+      value: true
+      description: "cluster the rows"
+    cluster_columns:
+      value: true
+    cluster_row_slices:
+      value: true
+    cluster_col_slices:
+      value: true
+    clustering_distance_rows:
+      value: euclidean
+    clustering_method_rows:
+      value: ward.d2
+    legend_include:
+      value:
+      description: "metadata variables to include"
+    legend_exclude:
+      value:
+      description: "metadata variables to exclude"
+logging:
+  value:
+    message: TRUE
+    warning: TRUE
+    quiet: TRUE

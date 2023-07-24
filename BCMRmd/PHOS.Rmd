@@ -31,12 +31,15 @@ params:
     description: "directory location for phos gct files"
   cluster_methods:
     value: [kmeans]
+  formula:
+    value: "~0+Extract_Genotype:Extract_Treatment"
+    description: "will move to separate volcano.Rmd document in the future, probably"
   pca:
     value:
       color:
-        value:
+        value: Extract_Genotype
       marker:
-        value:
+        value: Extract_Treatment
       annotate:
         value: true
       center:
@@ -117,7 +120,7 @@ get_param <- function(param){
 #.f <- params$paramfile
 .f <- get_param(params$paramfile)
 .use_paramfile <- get_param(params$use_paramfile)
-if (fs::file_exists(.f) & params$use_paramfile == TRUE) {
+if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
   subparams <- yaml::yaml.load_file(.f)
   cat(paste("loading", .f))
   #params <- modifyList(params, local_params)
@@ -152,14 +155,34 @@ PHOS_PATH <- fs::path(ROOTPATH, get_param(subparams$PHOS_PATH))
 
 prof_files <- PROF_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
 (prof_files)
+
 phos_files <- PHOS_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
 (phos_files)
 
-prof_gcts <- prof_files %>% purrr::map(cmapR::parse_gctx)
+parse_gct_dropzeros <- function (file){
+  gct <- cmapR::parse_gctx(file)
+  mat <- gct@mat
+  mat_nonzero <- mat[apply(mat, 1, sum) != 0, ]
+  remaining_rids <- rownames(mat_nonzero)
+  gct <- gct %>% subset_gct(rid=remaining_rids)
+  # this has to go somewhere else and be more costomizable
+  # valid_cids <- gct@cdesc %>% filter(Extract_Genotype != "RefMix") %>% pull(id)
+  # gct <- gct %>% subset_gct(cid = valid_cids)
+}
+prof_gcts <- prof_files %>% purrr::map(parse_gct_dropzeros)
+
+#prof_gcts <- prof_files %>% purrr::map(cmapR::parse_gctx)
 phos_gcts <- phos_files %>% purrr::map(cmapR::parse_gctx)
 # need to remove sample identifying info that is in the rdesc
 cols_to_drop <- c("recno", "runno", "searchno", "basename", "TopScore")
 phos_gcts <- purrr::map(phos_gcts, function(gct) {
+  gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
+  return(gct)
+})
+
+# need to remove sample identifying info that is in the rdesc
+cols_to_drop <- c("recno", "runno", "searchno", "basename", "GPGroup", "PSMs", "PeptidePrint", "EXPRecNo", "EXPRunNo", "EXPSearchNo", "LabelFLAG")
+prof_gcts <- purrr::map(prof_gcts, function(gct) {
   gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
   return(gct)
 })
@@ -175,10 +198,6 @@ phos_gcts <- purrr::map(phos_gcts, function(gct) {
 #phos_gcts %<>% purrr::map(~cmapR::subset_gct())
 # filter out not STY aa modi
 
-prof_gct_merged <- base::Reduce(
-  f = function(...) cmapR::merge_gct(..., dim = "col"),
-  x=prof_gcts
-)
 
 phos_gcts_f <- phos_gcts %>%
   purrr::map(~cmapR::subset_gct(., rid = .@rdesc%>%dplyr::filter(AA %in% c("S", "T", "Y")) %>% rownames)  )
@@ -194,9 +213,24 @@ ridcounts <- phos_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count
 .maxval <- 30
 .maxval <- max(ridcounts$count)
 rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
+# here filter for species
 
 phos_gct <- subset_gct(phos_gct_merged, rid=rids_filtered)
 
+
+prof_gct_merged <- base::Reduce(
+  f = function(...) cmapR::merge_gct(..., dim = "col"),
+  x=prof_gcts
+)
+ridcounts <- prof_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count=n_distinct(id.y)) %>% ungroup
+.maxval <- max(ridcounts$count)
+rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
+.species_filter <- prof_gct_merged@rdesc %>% filter(TaxonID=="9606")
+rids_filtered <- intersect(rids_filtered, .species_filter$GeneID)
+
+
+# here filter for species
+prof_gct <- subset_gct(prof_gct_merged, rid=rids_filtered)
 ```
 
 ## prettify metadata for better display
@@ -231,6 +265,11 @@ phos_gct@rid <- .new_gene_names
 phos_gct@rdesc$id <- .new_gene_names # must change this as well or we will get a name mismatch
 
 
+.display_name <- prof_gct@cdesc$DisplayID
+rownames(prof_gct@cdesc) <- .display_name
+colnames(prof_gct@mat) <- .display_name
+prof_gct@cid <- .display_name
+prof_gct@cdesc$id <- .display_name
 
 # .new_gene_names$name
 #.mat <- phos_gct@mat
@@ -286,22 +325,23 @@ prof_gct_log <- prof_gct %>% cmapR::GCT(mat = as.matrix(mat_log), rid = .@rid, c
 # add logic for checking if we are to do batch correction
 # if batch:
 ```
+## batch correction
 ```{r, label=phos.batch}
 
 do_batch <- get_param(subparams$batchcorrection$do_batch_correction)
 batchvar <- get_param(subparams$batchcorrection$batchvar)
 #if 
 #this is not needed
-#batchinfo <- phos_gct_log@cdesc %>% mutate(id=factor(id, levels=colnames(mat_log), ordered=TRUE)) %>% arrange(id)
-batchinfo <- batchinfo[[batchvar]] %>% as.character()
-mat_combat <- sva::ComBat(phos_gct_log@mat, batchvar)
+batchvalues <- phos_gct_log@cdesc[[batchvar]] %>% as.character()
+mat_combat <- sva::ComBat(phos_gct_log@mat, batchvalues)
 phos_gct_batch <- phos_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
 phos_gct_log <- phos_gct_batch
 
 
 #batchinfo <- prof_gct@cdesc %>% mutate(id=factor(id, levels=colnames(mat_log), ordered=TRUE)) %>% arrange(id)
-batchinfo <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
-mat_combat <- sva::ComBat(prof_gct_log@mat, batchvar)
+#batchinfo <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
+batchvalues <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
+mat_combat <- sva::ComBat(prof_gct_log@mat, batchvalues)
 prof_gct_batch <- prof_gct_log %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
 prof_gct_log <- prof_gct_batch
 
@@ -499,6 +539,7 @@ phos %>% melt_gct() %>%
 
 
 
+
 ## normalize
 
 ```{r, label='phos-normalize-expr-matrix-1', echo=T, eval=F}
@@ -601,31 +642,43 @@ prof_log <- new("GCT",
 
 ## heatmap def
 ```{r, label='phos-heatmap-def', include=T, eval=T}
-make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
-  .negsel <- c("sample", "plex", "recno", "id", "runno", "searchno", "assay", "replicate", "name",
+make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL){
+  .negsel <- c("sample", "plex", "recno",
+               "runno", "searchno", "assay", "replicate", "name",
                "lu",
                "ProtocolNo",
                "Washes",
                "Date",
                "Experimenter",
-               "X1",
-               "X1Detail",
-               "X2",
-               "X2Detail",
-               "X1.1",
-               "X1Detail.1",
-               "X2.1",
-               "X2Detail.1",
-               "X1.2",
-               "X1Detail.2",
-               "X2.2",
-               "X2Detail.2"
+               "Separation_1",
+               "Separation_1Detail",
+               "Separation_2",
+               "Separation_2Detail",
+               # "X1.1",
+               # "X1Detail.1",
+               # "X2.1",
+               # "X2Detail.1",
+               # "X1.2",
+               # "X1Detail.2",
+               # "X2.2",
+               # "Separation_2Detail"
+               "Exp_Date",
+               "Exp_Experimenter",
+               "Exp_ExpType",
+               "EXPRunNo",
+               "ExpSearchNo"
                )
   .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
-  if (!is.null(pos_sel))
-    .column_df <- .gct@cdesc %>% select(any_of(pos_sel))
+  
 
-  library(ComplexHeatmap)
+  column_split <- NULL
+  if (!is.null(cut_by)) {
+    for (.col in cut_by) {
+      .column_df[[.col]] <- factor(.column_df[[.col]], ordered = TRUE)
+    }
+    #.column_df <- .column_df %>% arrange(!!cut_by)
+    column_split <- lapply(.column_df[cut_by], as.factor)
+  } 
 
   recycle_colors <- function(type = "qual", n = 8) {
     # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
@@ -634,12 +687,17 @@ make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
     return(recycled_palette)
   }
 
-  .color_list <- .column_df %>%
+  # note we do not have the extra columns anymore
+  .nocolor <- c("id")
+  if (!is.null(pos_sel)) .cols <- pos_sel
+  else .cols <- colnames(.column_df)
+  .color_list <- .column_df[, .cols] %>%
+    select(-any_of(.nocolor)) %>% 
     as.list() %>%
     map(~ recycle_colors(n = length(unique(.))))
 
   # fix this maybe if better
-  for (col in colnames(.column_df)) {
+  for (col in names(.color_list)) {
     # print(col)
     # names(.color_list[[col]]) <-  unique(.column_df[[col]])
     names(.color_list[[col]]) <- unique(.column_df[[col]])
@@ -647,7 +705,7 @@ make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
 
 
   .top_annotation <- columnAnnotation(
-    df = .column_df %>% as.data.frame(),
+    df = .column_df[ , names(.color_list) ] %>% as.data.frame(),
     col = .color_list
     # col = anno_block(gp = gpar(fill = .color_list$metavar1))
   )
@@ -663,10 +721,12 @@ make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
   #mat_zscore <- mat_zscore[, rownames(.column_df)] # make sure order is the same
   mat <- mat(.gct)
   mat <- mat[, .gct@cdesc$id] # make sure same order
+  mat <- mat[, .column_df$id] # make sure same order
 
   .h <- ComplexHeatmap::Heatmap(
     mat,
     top_annotation = .top_annotation,
+    column_split = column_split,
     clustering_distance_rows = dist_no_na,
     clustering_method_rows = 'ward.D2',
     clustering_method_columns = 'ward.D2',
@@ -679,7 +739,6 @@ make_heatmap <- function(.gct, show_row_names=F, pos_sel=NULL){
     use_raster = T,
     show_row_names = show_row_names,
     show_row_dend = T,
-
   )
   .h
 }
@@ -782,6 +841,7 @@ print(head(mat(phos)))
 
 
 # PCA
+## phos
 render PCA.Rmd
 ```{r, label=phos-pca-render-func, message=T, warning=T, results='show', eval=T, class.source='fold-hide', eval=T}
 
@@ -789,16 +849,25 @@ render PCA.Rmd
 
 # .params$method <- "kmeans"
 
-render_pca_report <- function(center = T, scale = F, title="PCA", ...) {
-  .output_file_name <- paste0("PCA", "title_", title, "center_", center, "scale_", scale, ..., ".html")
+render_pca_report <- function(center = T, scale = F, title="PCA", color=NULL, marker=NULL, ...) {
+  .output_file_name <- paste0("PCA", "title_", title, "center_", center, "scale_", scale, ".html")
   #.output_file_name <- fs::path(params$ROOTPATH, .output_file_name)
+  
+  # Capture additional arguments into a list
+  additional_params <- list(...)
+
   rmarkdown::render("PCA.Rmd",
     output_file = .output_file_name,
     quiet = T,
-    params = list(
+    params = c(list(
       center = center,
       scale = scale,
-      title = title
+      title = title,
+      color = color,
+      marker = marker,
+      use_paramfile = F
+      ),
+      additional_params
     )
     # params=.params,
     # envir = globalenv(),
@@ -810,30 +879,56 @@ render_pca_report <- function(center = T, scale = F, title="PCA", ...) {
 }
 ```
 
-```{r, label="phos-pca-make-prof", echo=T, eval=T}
+```{r, label="phos.pca.phos.scaled", echo=T, eval=T}
 # TODO: allow customization
 gct <- phos_gct_log
 #gct <- prof
 
 .center <- T
 .scale <- T
+.pca_params <- get_param(subparams$pca)
+# get subset pca params 
+# there is no check here to see if it is defined in the yaml file, 
+.color <- .pca_params$color %>% get_param()
+.marker <- .pca_params$marker %>% get_param()
+.annotate <- .pca_params$annotate %>% get_param()
+#.annotate <- T
 
-.out <- render_pca_report(center = .center, scale = T,
-                          color = "genotype",
-                          title="prof")
+.out <- render_pca_report(center = .center,
+                          scale = .scale,
+                          title="PCA_phospho",
+                          color = .color,
+                          marker = .marker,
+                          annotate = .annotate
+)
 ```
 LINK
-```{r, label="pca-report-1-html-pagetest", echo=F, results="asis", eval=T}
+```{r, label="pca.report.1.link", echo=F, results="asis", eval=T}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 # print(.html)
 ## {-}
 ```
 
-```{r, label="phos-pca-make-phos", echo=T, eval=T}
+```{r, label="phos.pca.phos.noscaled", echo=T, eval=T}
 gct <- phos_gct_log
-.out <- render_pca_report(center = .center, scale = F,
-                          color = "genotype",
-                          title="phos")
+
+.center <- T
+.scale <- F
+.pca_params <- get_param(subparams$pca)
+# get subset pca params 
+.color <- .pca_params$color %>% get_param()
+.marker <- .pca_params$marker %>% get_param()
+# .annotate <- .pca_params$annotate %>% get_param() # why is this n ot working?
+.annotate <- T
+
+
+.out <- render_pca_report(center = .center,
+                          scale = .scale,
+                          color = .color,
+                          marker = .marker,
+                          annotate = .annotate,
+                          title="PCA_phospho"
+                          )
 
 # html
 # .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
@@ -843,13 +938,78 @@ gct <- phos_gct_log
 ```
 
 LINK
-```{r, label="pca-report-2-html-pagetest", echo=F, results="asis", eval=T}
+```{r, label="pca.report.2.link", echo=F, results="asis", eval=T}
 .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
 # print(.html)
 ## {-}
 ```
 
+## prof
 
+```{r, label="phos.pca.prof.scaled", echo=T, eval=T}
+# TODO: allow customization
+gct <- prof_gct_log
+#gct <- prof
+
+.center <- T
+.scale <- T
+.pca_params <- get_param(subparams$pca)
+# get subset pca params 
+# there is no check here to see if it is defined in the yaml file, 
+.color <- .pca_params$color %>% get_param()
+.marker <- .pca_params$marker %>% get_param()
+.annotate <- .pca_params$annotate %>% get_param()
+#.annotate <- T
+
+.out <- render_pca_report(center = .center,
+                          scale = .scale,
+                          title="PCA_profiling",
+                          color = .color,
+                          marker = .marker,
+                          annotate = .annotate
+)
+```
+LINK
+```{r, label="pca.report.3.link", echo=F, results="asis", eval=T}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+## {-}
+```
+
+```{r, label="phos.pca.prof.noscaled", echo=T, eval=T}
+gct <- prof_gct_log
+
+.center <- T
+.scale <- F
+.pca_params <- get_param(subparams$pca)
+# get subset pca params 
+.color <- .pca_params$color %>% get_param()
+.marker <- .pca_params$marker %>% get_param()
+# .annotate <- .pca_params$annotate %>% get_param() # why is this n ot working?
+.annotate <- T
+
+
+.out <- render_pca_report(center = .center,
+                          scale = .scale,
+                          title = "PCA_profiling",
+                          color = .color,
+                          marker = .marker,
+                          annotate = .annotate
+                          )
+
+# html
+# .html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+
+# htmltools::includeHTML(.out)
+```
+
+LINK
+```{r, label="pca.report.4.link", echo=F, results="asis", eval=T}
+.html <- cat(paste0("[", .out, "](", .out, ")"), "\n\n")
+# print(.html)
+## {-}
+```
 
 ## examine particular sites
 
@@ -880,28 +1040,36 @@ make_p_table <- function(geneid){
 ## Differential Analysis
 ###limma
 
-```{r eval=F}
+```{r eval=T}
 
-formula <- get_param(subparams$formula)
-contrasts <- get_param(subparams$contrasts)
+formula <- get_param(subparams$formula) %>% as.formula()
+( contrasts_str <- get_param(subparams$contrasts) )
+( contrasts_list <- strsplit(contrasts_str, "\n")[[1]] ) # strsplit returns vector array length 1
 
-mod <- model.matrix(~0 + genotype, phos@cdesc)
+#(  contrasts2 <- sub("^['\"]|['\"]$", "", contrasts) )
+( contrasts_list <- purrr::map(contrasts_list, 
+                               ~gsub("^['\"]|['\"]$", "", .) )
+                               )
+
+#mod <- model.matrix(~0 + genotype, phos@cdesc)
+mod <- model.matrix(formula, phos_gct_log@cdesc)
+
 colnames(mod) <- make.names(colnames(mod)) #where is this used
-limma_input <- mat(phos_log)
-limma_input <- limma_input[apply(limma_input, 1, function(row) all(row != -Inf)), ]
+limma_input <- phos_gct_log %>% mat()
+# limma_input <- limma_input[apply(limma_input, 1, function(row) all(row != -Inf)), ]
 limma_input <- limma_input[ ,rownames(mod) ]
 
 # Select rows where all values are not -Inf
 
 
-contrast_list <- c(
-  "genotypeIntS6 - genotypeWT",
-  "genotypeIntS12 - genotypeWT",
-  "genotypeIntS6 - genotypeIntS12",
-  #"genotypeIntS6 + genotypeIntS12"
-  )
-contrasts <- makeContrasts(contrasts=contrast_list, levels = mod) #need to make variable contrast def
-
+#contrast_list <- c(
+#  "genotypeIntS6 - genotypeWT",
+#  "genotypeIntS12 - genotypeWT",
+#  "genotypeIntS6 - genotypeIntS12",
+#  #"genotypeIntS6 + genotypeIntS12"
+#  )
+# contrasts <- makeContrasts(contrasts=contrast_list, levels = mod) #need to make variable contrast def
+contrasts <- makeContrasts(contrasts = contrasts_list, levels = mod)
 prefit <- lmFit(limma_input, mod)
 fit <- contrasts.fit(prefit, contrasts) %>% eBayes(trend = T, robust = T)
 ```
@@ -914,7 +1082,7 @@ limma_res <- purrr::map_dfr(
   rownames_to_column("GeneIDSite") %>%
   mutate(contrast=.x)
 )
-.file <- file.path(ROOTPATH, "MSPC000967_limma_res.tsv")
+.file <- file.path(ROOTPATH, "MSPC000936_limma_res.tsv")
 limma_res %>% write_tsv(.file)
 # %>%
   #rownames_to_column("GeneIDSite") %>%
@@ -923,6 +1091,21 @@ limma_res %>% write_tsv(.file)
 
 #limma_res %>% head(20)
 ```
+
+
+```{r, label=phos.geneset.heatmap, fig.width=12, fig.height=7}
+
+.smarcs_h <- phos_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "SMARC"))
+.smarcs_m <- phos_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "Smarc"))
+.smarcs <- c(.smarcs_h$id,
+             .smarcs_m$id
+             )
+pos_sel <- c("Extract_Treatment", "Extract_Genotype")
+cut_by <- "Extract_Treatment"
+cut_by <- "Extract_Genotype"
+subset_gct(phos_gct_zscore, rid=.smarcs) %>% make_heatmap(show_row_names=T, pos_sel = pos_sel, cut_by = cut_by )
+```
+
 
 
 ## top50 { .tabset }
@@ -970,3 +1153,10 @@ subset_gct(phos_zscore, rid=.top50$GeneIDSite) %>% make_heatmap(show_row_names=T
 subset_gct(phos_zscore, rid=.top50$GeneIDSite) %>% make_heatmap(show_row_names=T)
 
 ```
+
+
+```{r, label=phos.params}
+( subparams )
+
+```
+

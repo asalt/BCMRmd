@@ -26,14 +26,14 @@ batchcorrection:
     description:
   parametric:
     value: true
-
-
 pca:
   value:
     color:
-      value:
+      value: "Extract_Genotype"
+      display_name: "PPID"
     marker:
-      value:
+      value: "Extract_Treatment"
+      display_name: "Source"
     annotate:
       value: true
     center:
@@ -67,3 +67,16 @@ logging:
     message: TRUE
     warning: TRUE
     quiet: TRUE
+formula:
+  value: "~0+Extract_Genotype"
+  description: "will move to separate volcano.Rmd document in the future, probably"
+contrasts:
+  value: |
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB620675"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB291914"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB357776"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB528642"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB668816"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB697304"
+          "Extract_GenotypeBGB171591 - Extract_GenotypeBGB987445"
+  description: "requested contrasts for the formula. If undefined returns all"

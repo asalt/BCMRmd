@@ -134,7 +134,6 @@ if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
 
 ```{r, label=phos.set.rootdir, class.source="fold-show", eval=F} 
 # # not even sure we need this
-# ROOTPATH <- get_param(subparams$ROOTPATH)
 # ROOTPATH <- fs::path_abs(ROOTPATH) 
 # (ROOTPATH)
 # setwd(ROOTPATH)
@@ -165,6 +164,10 @@ parse_gct_dropzeros <- function (file){
   mat_nonzero <- mat[apply(mat, 1, sum) != 0, ]
   remaining_rids <- rownames(mat_nonzero)
   gct <- gct %>% subset_gct(rid=remaining_rids)
+  if ("TaxonID" %in% colnames(gct@cdesc)){
+    gct@cdesc$TaxonID <- NULL
+  }
+  gct
   # this has to go somewhere else and be more costomizable
   # valid_cids <- gct@cdesc %>% filter(Extract_Genotype != "RefMix") %>% pull(id)
   # gct <- gct %>% subset_gct(cid = valid_cids)
@@ -174,7 +177,7 @@ prof_gcts <- prof_files %>% purrr::map(parse_gct_dropzeros)
 #prof_gcts <- prof_files %>% purrr::map(cmapR::parse_gctx)
 phos_gcts <- phos_files %>% purrr::map(cmapR::parse_gctx)
 # need to remove sample identifying info that is in the rdesc
-cols_to_drop <- c("recno", "runno", "searchno", "basename", "TopScore")
+cols_to_drop <- c("recno", "runno", "searchno", "basename", "TopScore", "TaxonID")
 phos_gcts <- purrr::map(phos_gcts, function(gct) {
   gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
   return(gct)
@@ -296,7 +299,7 @@ prof_gct@cdesc$id <- .display_name
 dfm <- phos_gct %>% melt_gct()
 dfm %<>% 
   mutate(value = value / min(value[value != 0], na.rm=T)) %>% 
-  group_by(id.y) %>%
+  group_by(id.y, TaxonID) %>%
   mutate(mednorm = value / median(value, na.rm=TRUE) + 1) %>%
   mutate(logmednorm=log(mednorm)) %>%
   ungroup()
@@ -312,7 +315,7 @@ phos_gct_log <- phos_gct %>% cmapR::GCT(mat = as.matrix(mat_log), rid = .@rid, c
 dfm <- prof_gct %>% melt_gct()
 dfm %<>% 
   mutate(value = value / min(value[value != 0], na.rm=T)) %>% 
-  group_by(id.y) %>%
+  group_by(id.y, TaxonID) %>%
   mutate(mednorm = value / median(value, na.rm=TRUE) + 1) %>%
   mutate(logmednorm=log(mednorm)) %>%
   ungroup()
@@ -330,24 +333,30 @@ prof_gct_log <- prof_gct %>% cmapR::GCT(mat = as.matrix(mat_log), rid = .@rid, c
 
 do_batch <- get_param(subparams$batchcorrection$do_batch_correction)
 batchvar <- get_param(subparams$batchcorrection$batchvar)
-#if 
-#this is not needed
-batchvalues <- phos_gct_log@cdesc[[batchvar]] %>% as.character()
-mat_combat <- sva::ComBat(phos_gct_log@mat, batchvalues)
-phos_gct_batch <- phos_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
-phos_gct_log <- phos_gct_batch
 
+if (do_batch == TRUE){
+  
+  batchvalues <- phos_gct_log@cdesc[[batchvar]] %>% as.character()
+  mat_combat <- sva::ComBat(phos_gct_log@mat, batchvalues)
+  phos_gct_batch <- phos_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+  phos_gct_log <- phos_gct_batch
+  
+  
+  #batchinfo <- prof_gct@cdesc %>% mutate(id=factor(id, levels=colnames(mat_log), ordered=TRUE)) %>% arrange(id)
+  #batchinfo <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
+  batchvalues <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
+  mat_combat <- sva::ComBat(prof_gct_log@mat, batchvalues)
+  prof_gct_batch <- prof_gct_log %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+  prof_gct_log <- prof_gct_batch
 
-#batchinfo <- prof_gct@cdesc %>% mutate(id=factor(id, levels=colnames(mat_log), ordered=TRUE)) %>% arrange(id)
-#batchinfo <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
-batchvalues <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
-mat_combat <- sva::ComBat(prof_gct_log@mat, batchvalues)
-prof_gct_batch <- prof_gct_log %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
-prof_gct_log <- prof_gct_batch
-
+}
 #else:
 #phos_gct_log <- phos_gct %>% cmapR::GCT(mat = mat_log, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
 # if not true
+.file <- file.path(ROOTPATH, "MSPC000936_phos_log_batchcor")
+phos_gct_log %>% write_gct(.file, precision = 8)
+.file <- file.path(ROOTPATH, "MSPC000936_phos_log_batchcor.tsv")
+readr::write_tsv(mat(phos_gct_log) %>% as.data.frame() %>% rownames_to_column("id"), .file)
 
 ```
 
@@ -642,7 +651,8 @@ prof_log <- new("GCT",
 
 ## heatmap def
 ```{r, label='phos-heatmap-def', include=T, eval=T}
-make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL){
+make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, cluster_rows=T, cluster_columns=T, ...){
+  .more_params = list(...)
   .negsel <- c("sample", "plex", "recno",
                "runno", "searchno", "assay", "replicate", "name",
                "lu",
@@ -739,6 +749,9 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL){
     use_raster = T,
     show_row_names = show_row_names,
     show_row_dend = T,
+    cluster_rows = cluster_rows,
+    cluster_columns = cluster_columns,
+    ...,
   )
   .h
 }
@@ -746,8 +759,9 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL){
 
 
 ```{r, label="phos.phos_alldata_heatmap", eval=T}
-cols_to_annotate <- c("CellTissue", "Genotype")
-cols_to_annotate <- c("Genotype", "recno")
+#cols_to_annotate <- c("celltissue", "genotype")
+#cols_to_annotate <- c("Genotype", "recno")
+cols_to_annotate <- c("Extract_Treatment", "Extract_Genotype")
 # make_heatmap(phos_gct_batch, pos_sel = cols_to_annotate)
 make_heatmap(phos_gct_zscore, pos_sel = cols_to_annotate)
 ```
@@ -1015,12 +1029,14 @@ LINK
 
 
 
-```{r, label='phos-makeptable', eval=F}
-make_p_table <- function(geneid){
-  geneid <- geneid
-  prof_expression_data <- mat(prof)[geneid,]
-  .psites <- phos@rdesc[phos@rdesc$GeneID == geneid,]
-  phos_expression_data <- mat(phos)[rownames(.psites), ]
+```{r, label='phos.makeptable', eval=F}
+make_p_table <- function(geneids){
+  prof_gids <- intersect(geneids, prof_gct_log@rid)
+  prof_expression_data <- mat(prof_gct_log)[prof_gids,]
+  
+  phos_gids <- intersect(geneids, phos_gct_log@rdesc$GeneID)
+  .psites <- phos_gct_log@rdesc[phos_gct_log@rdesc$GeneID %in% geneids, ]
+  phos_expression_data <- mat(phos_gct_log)[rownames(.psites), ]
   #phos_site <- phos@rdesc$phosphosites  # Adjust this line based on how phosphosites is stored in your data
   #prof$Phosphosites <- phos_site
   DT::datatable(.psites)
@@ -1040,50 +1056,93 @@ make_p_table <- function(geneid){
 ## Differential Analysis
 ###limma
 
-```{r eval=T}
+```{r, label='phos.limma.def', eval=T}
 
 formula <- get_param(subparams$formula) %>% as.formula()
 ( contrasts_str <- get_param(subparams$contrasts) )
 ( contrasts_list <- strsplit(contrasts_str, "\n")[[1]] ) # strsplit returns vector array length 1
-
-#(  contrasts2 <- sub("^['\"]|['\"]$", "", contrasts) )
 ( contrasts_list <- purrr::map(contrasts_list, 
                                ~gsub("^['\"]|['\"]$", "", .) )
-                               )
+                               ) %>% unlist
 
+do_limma <- function(gct){
 #mod <- model.matrix(~0 + genotype, phos@cdesc)
-mod <- model.matrix(formula, phos_gct_log@cdesc)
-
-colnames(mod) <- make.names(colnames(mod)) #where is this used
-limma_input <- phos_gct_log %>% mat()
-# limma_input <- limma_input[apply(limma_input, 1, function(row) all(row != -Inf)), ]
-limma_input <- limma_input[ ,rownames(mod) ]
-
-# Select rows where all values are not -Inf
-
-
-#contrast_list <- c(
-#  "genotypeIntS6 - genotypeWT",
-#  "genotypeIntS12 - genotypeWT",
-#  "genotypeIntS6 - genotypeIntS12",
-#  #"genotypeIntS6 + genotypeIntS12"
-#  )
-# contrasts <- makeContrasts(contrasts=contrast_list, levels = mod) #need to make variable contrast def
-contrasts <- makeContrasts(contrasts = contrasts_list, levels = mod)
-prefit <- lmFit(limma_input, mod)
-fit <- contrasts.fit(prefit, contrasts) %>% eBayes(trend = T, robust = T)
+  mod <- model.matrix(formula, gct@cdesc)
+  colnames(mod) <- make.names(colnames(mod)) #where is this used
+  limma_input <- gct %>% mat()
+  limma_input <- limma_input[ ,rownames(mod) ]
+  #contrast_list <- c(
+  #  "genotypeIntS6 - genotypeWT",
+  #  "genotypeIntS12 - genotypeWT",
+  #  "genotypeIntS6 - genotypeIntS12",
+  #  #"genotypeIntS6 + genotypeIntS12"
+  #  )
+  # contrasts <- makeContrasts(contrasts=contrast_list, levels = mod) #need to make variable contrast def
+  contrasts <- makeContrasts(contrasts = contrasts_list, levels = mod)
+  prefit <- lmFit(limma_input, mod)
+  fit <- contrasts.fit(prefit, contrasts) %>% eBayes(trend = T, robust = T)
+  fit
+}
 ```
 
 
-```{r eval=F}
-limma_res <- purrr::map_dfr(
-  colnames(contrasts),
+```{r, label='phos.limma.phos.run', eval=T}
+
+fit <- do_limma(phos_gct_log)
+limma_res_phos <- purrr::map_dfr(
+  contrasts_list,
   ~ topTable(fit, n=Inf, sort.by="none", coef=.x, confint = F  ) %>%
-  rownames_to_column("GeneIDSite") %>%
+  rownames_to_column("GeneSymbolSite") %>%
   mutate(contrast=.x)
 )
-.file <- file.path(ROOTPATH, "MSPC000936_limma_res.tsv")
-limma_res %>% write_tsv(.file)
+limma_res_phos %<>%  pivot_wider(id_cols = GeneSymbolSite, names_from = contrast,
+                               values_from = c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B")
+                               )
+
+limma_res_phos_meta <- limma_res_phos %>% left_join(phos_gct@rdesc,
+                             by = c('GeneSymbolSite' = 'id')
+                             )
+.order <- c("SiteName",
+            "SiteID",
+            "GeneID",
+            "GeneSymbol",
+            "GeneDescription",
+            "Site",
+            "AA",
+            "MassShift",
+            "Protein_Accession_Selected",
+            "Protein_Length_Selected",
+            "Reason_Selected",
+            "AApos_Selected",
+            "Protein_Accessions",
+            "AApos_List",
+            "TopScore"
+            )
+.front <- intersect(.order, colnames(limma_res_phos_meta))
+
+# Reorder the dataframe
+limma_res_phos_meta <- limma_res_phos_meta %>%
+  select(all_of(.front), everything())
+
+#.order <- c(
+#  
+#)
+.file <- file.path(ROOTPATH, "MSPC000936_limma_res_phos.tsv")
+limma_res_phos_meta %>% write_tsv(.file)
+
+```
+
+```{r, label='phos.limma.prof.run', eval=T}
+fit <- do_limma(prof_gct_log)
+limma_res_prof <- purrr::map_dfr(
+  contrasts_list,
+  ~ topTable(fit, n=Inf, sort.by="none", coef=.x, confint = F  ) %>%
+  rownames_to_column("GeneID") %>%
+  mutate(contrast=.x)
+)
+.file <- file.path(ROOTPATH, "MSPC000936_limma_res_prof.tsv")
+limma_res_prof %>% write_tsv(.file)
+
 # %>%
   #rownames_to_column("GeneIDSite") %>%
   #tibble() %>%
@@ -1092,8 +1151,70 @@ limma_res %>% write_tsv(.file)
 #limma_res %>% head(20)
 ```
 
+```{r, label='phos.prof.limma.merge', eval=T}
+phos_prof_stats <- left_join(limma_res_phos,
+          limma_res_prof,
+          by = c("GeneID", "contrast"),
+          suffix = c(".phos", ".prof")
+          ) %>% 
+  mutate(
+    adj.P.Val.phos = replace_na(adj.P.Val.phos, 1),
+    adj.P.Val.prof = replace_na(adj.P.Val.prof, 1),
+    logFC.phos = replace_na(logFC.phos, 0),
+    logFC.prof = replace_na(logFC.prof, 0),
+  )
 
-```{r, label=phos.geneset.heatmap, fig.width=12, fig.height=7}
+phos_prof_stats %<>% mutate(
+  SigCat = if_else(  !is.na(adj.P.Val.phos) & adj.P.Val.phos < 0.05 & !is.na(adj.P.Val.prof) & adj.P.Val.prof < 0.05, "Both Sig",
+                     if_else(
+                       adj.P.Val.phos < 0.05 & adj.P.Val.prof >= 0.05, "Phos Only",  
+                       if_else(
+                         adj.P.Val.phos >= 0.05 & adj.P.Val.prof < 0.05, "Prof Only",  
+                         "Not Sig."
+                     )
+                     )
+                     )
+  
+)
+phos_prof_stats %>% count(SigCat)
+```
+
+```{r, label='phos.2d.differential', eval=T, fig.width=10, fig.height=12}
+phos_prof_stats %>% 
+  ggpubr::ggscatter(
+    x="logFC.phos",
+    y="logFC.prof",
+    color = "SigCat",
+    alpha=.25,
+    facet.by = "contrast"
+  )
+```
+```{r, fig.height=14, fig.width=14}
+contrast1 <- c(phos_prof_stats$contrast %>% unique)[1]
+
+plot_contrast_top50 <- function(contrast){
+  print(contrast)
+  .sel <- phos_prof_stats %>% 
+    filter(contrast == !!contrast) %>% 
+    arrange(P.Value.phos) %>% 
+    head(50)
+  geneids <- .sel$GeneID
+  .rids <- phos_gct_log@rdesc %>% filter(GeneID %in% geneids) %>% pull(id)
+  #make_p_table(geneids)
+  .gct <-subset_gct(phos_gct_zscore, rid=.rids)
+  
+  pos_sel <- c("Extract_Treatment", "Extract_Genotype")
+  #cut_by <- "Extract_Treatment"
+  cut_by <- "Extract_Genotype"
+  .gct %>% make_heatmap(pos_sel = pos_sel, cut_by = cut_by, show_row_names = T, column_title=contrast)
+}
+phos_prof_stats$contrast %>% unique() %>% map(~plot_contrast_top50(.))
+```
+
+
+
+
+```{r, label=phos.geneset.heatmap, fig.width=15, fig.height=7}
 
 .smarcs_h <- phos_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "SMARC"))
 .smarcs_m <- phos_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "Smarc"))

@@ -7,14 +7,14 @@ output:
     code_folding: hide
     highlight: zenburn # pygments, kate, monochrome, zenburn
     includes:
-      #in_header: header.html 
+      #in_header: header.html
 params:
   use_paramfile:
     value:
       TRUE
   paramfile:
     value:
-      NULL  
+      NULL
   color:
     value: Extract_Genotype
   marker:
@@ -35,10 +35,10 @@ params:
     value:
       FALSE
   colkey:
-    value: NULL 
+    value: NULL
     description:
         "Vector of name-value pairs relating to value passed to 'col', e.g., c(A='forestgreen', B='gold')."
-      
+
   logging:
     value:
       message: FALSE
@@ -145,10 +145,10 @@ gct@mat %>% head()
       center = !!.center,
       scale = !!.scale
     )
-  ) %>% 
+  ) %>%
   ungroup
 # drop anything that has a value of NaN. There probably should not be any Nans, but even if there are we will not deal with that here.
-.rescaled_gct_mat %>% filter(is.na(value))  # are there any?
+# .rescaled_gct_mat %>% filter(is.na(value))  # are there any?
 #
 .rescaled_gct_mat[ is.na(.rescaled_gct_mat$value), 'value' ] <- 0
 #.rescaled_gct_mat %<>% filter(!is.na(value))
@@ -162,14 +162,14 @@ gct@mat %>% head()
 .rownames <- .forpca$id.x
 .forpca <- .forpca %>% select(-id.x) %>% as.data.frame
 rownames(.forpca) <- .rownames
-  
+
 .forpca <- .forpca[, gct@cid] # put back in order
   #tibble::column_to_rownames(var="id.x")
   # need the rownames to be set to the geneids
-  # this does it 
+  # this does it
 
   #%>% as.data.frame()
-  
+
   # make to gene symbols in the rdesc slot
 # if (!(is.null(gct@rdesc))){
 #   if ("SiteName" %in% colnames(gct@rdesc))
@@ -178,10 +178,10 @@ rownames(.forpca) <- .rownames
 #     .rdesc <- paste(gct@rdesc$id, gct@rdesc$GeneSymbol)  #ensure always is unique
 #   else
 #     .rdesc <- rownames(.forpca)
-#    
-#   rownames(.forpca) <- .rdesc 
+#
+#   rownames(.forpca) <- .rdesc
 #   # this is not working
-#    #unite("concatenated_column", everything(), sep = "-") %>% 
+#    #unite("concatenated_column", everything(), sep = "-") %>%
 #    #jpull(concatenated_column)
 # }
 # browser()
@@ -212,7 +212,7 @@ rownames(.metadata)
 ```
 # PCA Results
 
-## elbow 
+## elbow
 
 ```{r, label=pca.elbow}
 .elbow <- PCAtools::findElbowPoint(.pcaobj$variance)
@@ -221,7 +221,7 @@ rownames(.metadata)
   axisLabSize = 18,
   titleLabSize = 22,
   vline = .elbow
-) 
+)
 #
 
 .p +
@@ -276,29 +276,29 @@ mybiplot_partial <- purrr::partial(mybiplot, color=color, marker=marker, annotat
  #biplot(.pcaobj, colby="metavar1")
 ```
 
-### pca.biplot-1-2 
+### pca.biplot-1-2
 
 ```{r, label=pca.biplot-1-2, fig.width=12, fig.height=10}
 color = subparams$color
 marker = subparams$marker
 mybiplot_partial(
-  .pcaobj, x = "PC1", y = "PC2", 
+  .pcaobj, x = "PC1", y = "PC2",
 )
-# mybiplot(.pcaobj, x = "PC1", y = "PC2", 
+# mybiplot(.pcaobj, x = "PC1", y = "PC2",
 #          colby = color,
 #          shape = marker,
 #          legend = T
 #          )
 ```
 
-### pca.biplot-1-3 
+### pca.biplot-1-3
 
 ```{r, label=pca-biplot-1-3, fig.width=12, fig.height=10}
 # mybiplot(.pcaobj, x = "PC1", y = "PC3",
 #          colby = colby,
 #          legend=T)
 mybiplot_partial(
-  .pcaobj, x = "PC1", y = "PC3", 
+  .pcaobj, x = "PC1", y = "PC3",
 )
 # biplot(.pca,
 #        x="PC1",
@@ -314,18 +314,35 @@ mybiplot_partial(
 #        )
 ```
 
-### pca.biplot-2-3 
+### pca.biplot-2-3
 
 ```{r, label=pca-biplot-2-3, fig.width=12, fig.height=10}
 
 mybiplot_partial(
-  .pcaobj, x = "PC2", y = "PC3", 
+  .pcaobj, x = "PC2", y = "PC3",
 )
 # mybiplot(.pcaobj, x = "PC2", y = "PC3",
 #          colby = colby,
 #          legend=T)
 # .pca %>% airsplot()
 ```
+
+### pca.biplot-1-4
+```{r, label=pca-biplot-1-4, fig.width=12, fig.height=10}
+
+mybiplot_partial(
+  .pcaobj, x = "PC1", y = "PC4",
+)
+```
+
+### pca.biplot-2-4
+```{r, label=pca-biplot-2-4, fig.width=12, fig.height=10}
+
+mybiplot_partial(
+  .pcaobj, x = "PC2", y = "PC4",
+)
+```
+
 ```{r, label=pca-loadings1,  fig.width=12, fig.height=10}
 # myplotloadings <- function(.pcaobj, ...) {
 #   plotloadings(
@@ -357,7 +374,7 @@ rangeRetain_value <- loadings_abs_sorted[Nloadings]
   plotloadings(.pcaobj,
                components = seq(5),
     rangeRetain = rangeRetain_value,
-    labSize = 4.0,
+    labSize = 1.0,
     title = 'Loadings plot',
     subtitle = 'PC1, PC2, PC3, PC4, PC5',
     caption = 'Top 1% variables',
@@ -380,7 +397,7 @@ rangeRetain_value <- loadings_abs_sorted[Nloadings]
   plotloadings(.pcaobj,
                components = components,
     rangeRetain = rangeRetain_value,
-    labSize = 4.0,
+    labSize = 1.0,
     title = 'Loadings plot',
     subtitle = 'PC1, PC2, PC3, PC4, PC5',
     caption = 'Top 1% variables',
@@ -410,7 +427,7 @@ plotloadings(.pcaobj,
    rangeRetain = rangeRetain_value,
    absolute = TRUE,
    col = c('black', 'pink', 'red4'),
-   drawConnectors = TRUE, labSize = 4) + coord_flip()
+   drawConnectors = TRUE, labSize = 2) + coord_flip()
 ```
 ### PCA2
 ```{r, label='pca-loading2', eval=T, include=T}
@@ -428,7 +445,7 @@ plotloadings(.pcaobj,
    rangeRetain = rangeRetain_value,
    absolute = FALSE,
    col = c('black', 'pink', 'red4'),
-   drawConnectors = TRUE, labSize = 4) + coord_flip()
+   drawConnectors = TRUE, labSize = 2) + coord_flip()
 ```
 
 ### PCA3
@@ -447,7 +464,7 @@ plotloadings(.pcaobj,
    rangeRetain = rangeRetain_value,
    absolute = FALSE,
    col = c('black', 'pink', 'red4'),
-   drawConnectors = TRUE, labSize = 4) + coord_flip()
+   drawConnectors = TRUE, labSize = 2) + coord_flip()
 ```
 
 ## { - }
@@ -483,15 +500,15 @@ plotloadings(.pcaobj,
 #   )
 # )
 ```
- 
- 
- 
+
+
+
 ```{r, pca-toploadings-heatmap, eval=F, include=F}
 
 # library(ComplexHeatmap)
 # .negsel <- c("sample", "plex", "recno", "label", "id", "runno", "searchno", "assay", "replicate")
 # .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
-# 
+#
 # recycle_colors <- function(type = "qual", n = 8) {
 #   # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
 #   original_palette <- brewer_pal(type = "qual", palette = 2)(min(n, 8))
@@ -500,8 +517,8 @@ plotloadings(.pcaobj,
 # }
 # #
 # # .color_list <- .column_df %>% as.list %>% map( ~ brewer_pal("qual", palette=2)(length(unique(.))) )
-# 
-# 
+#
+#
 # .color_list <- .column_df %>%
 #   as.list() %>%
 #   map(~ recycle_colors(n = length(unique(.))))
@@ -511,8 +528,8 @@ plotloadings(.pcaobj,
 #   # names(.color_list[[col]]) <-  unique(.column_df[[col]])
 #   names(.color_list[[col]]) <- unique(.column_df[[col]])
 # }
-# 
-# 
+#
+#
 # .top_annotation <- columnAnnotation(
 #   df = .column_df %>% as.data.frame(),
 #   col = .color_list
@@ -523,7 +540,7 @@ plotloadings(.pcaobj,
 
 #ComplexHeatmap::Heatmap()
 ```
- 
+
 # params
 ```{r, label=pca.params}
 ( subparams )

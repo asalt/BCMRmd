@@ -1,0 +1,13 @@
+# R related
+*.RData
+*.Rhistory
+
+# Rmd generated files
+*_cache/
+*_files/
+*.html
+*.html.bak
+
+# Others
+bugs.txt
+

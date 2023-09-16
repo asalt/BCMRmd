@@ -1,0 +1,65 @@
+---
+title: "volcano"
+author: "BCM Proteomics Core"
+date: "`r Sys.Date()`"
+output: html_document
+output:
+  html_document:
+    code_folding: hide
+    highlight: zenburn # pygments, kate, monochrome, zenburn
+    toc: yes
+params:
+  use_paramfile:
+    value: TRUE
+    description: "Boolean value whether or not to load param file if present"
+  paramfile:
+    value: "../params/volcano.yaml"
+  formula:
+    value: "~0+Extract_Genotype:Extract_Treatment"
+  ROOTPATH:
+    value: "/media/alex/20230612/MSPC000936/MSPC000936/"
+  logging:
+    value:
+      message: TRUE
+      warning: TRUE
+      quiet: TRUE
+end:
+---
+
+```{r label=volcano.setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(cmapR))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(fs))
+suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(ComplexHeatmap))
+suppressPackageStartupMessages(library(circlize))
+suppressPackageStartupMessages(library(tidymodels))
+library(tidymodels)
+library(tibble)
+library(magrittr)
+source("funcs.R")
+
+mykable <- function(data) {
+    knitr::kable(data, booktabs = TRUE, digits = 4) %>%
+        kable_styling(latex_options = c("striped", "scale_down"),
+                      bootstrap_options = c("striped", 'condensed', "bordered")
+                      )
+}
+
+get_param <- function(param){
+  if(is.list(param) && "value" %in% names(param)){
+    return(param$value)
+  } else{
+    return(param)
+  }
+}
+```
+
+
+```{r, label=volcano.define}
+
+```
+

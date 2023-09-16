@@ -13,8 +13,28 @@ output:
       in_header:
 mainfont: Noto Sans
 params:
-   paramfile:
+  use_paramfile:
+    value: FALSE
+    description: "Boolean value whether or not to load param file if present"
+  paramfile:
      value: "../BCMRMD_PARAMS.yml"
+  ROOTPATH:
+    #value: "`normalizePath(dirname('.'))`"
+    value: "/media/alex/20230612/MSPC000936/MSPC000936/"
+    description: "Root path location"
+  routines:
+    value:
+      tackle: FALSE
+      E2G: FALSE
+      MASIC: FALSE
+      denovo: FALSE
+      PHOS: TRUE
+  PHOS:
+    value:
+  tackle:
+    value:
+  MASIC:
+    value:
   # ROOTPATH:
   #   #value: "`normalizePath(dirname('.'))`"
   #   value: ".."
@@ -62,9 +82,9 @@ params
 
 # .f <- "../BCMRmd_PARAMS.yml"
 .f <- params$paramfile
-if (fs::file_exists(.f)) {
+if (fs::file_exists(.f) & params$use_paramfile == TRUE) {
   subparams <- yaml::yaml.load_file(.f)
-  #cat(paste("loading", .f))
+  cat(paste("loading", .f))
   #params <- modifyList(params, local_params)
 } else{
   subparams <- params
@@ -82,7 +102,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-```{r index_settings}
+```{r, label=index.settings}
 BCMBLUE <- "#002396"
 knitr::knit_hooks$set(debug = function(before, options, envir) {
   if (!before) {
@@ -96,7 +116,7 @@ knitr::knit_hooks$set(debug = function(before, options, envir) {
 ```
 
 
-```{r index_setup, include=TRUE}
+```{r index.setup, include=TRUE}
 suppressPackageStartupMessages(library(cmapR))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(ggpubr))
@@ -165,6 +185,18 @@ rmarkdown::render("MASIC.Rmd",
 (.dirname)
 ```
 
+```{r, label=index.phos, results='show', message=subparams$logging$message, warning=subparams$logging$warning, eval=subparams$routines$PHOS}
+
+.new_params <- params$PHOS
+.new_params$logging <- params$logging
+.out <- rmarkdown::render("PHOS.Rmd",
+  output_file = "PHOS.html",
+  #params = params$PHOS,
+  envir = new.env(),
+  quiet = F
+) # , params=.params)
+
+```
 ```{r, label=index-blank123}
 # rint(normalizePath(dirname('.')) )
 # rmarkdown::render('tackle.Rmd', output_file = 'tackle.html', params=params)

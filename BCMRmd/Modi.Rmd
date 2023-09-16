@@ -14,6 +14,9 @@ params:
     description: "Boolean value whether or not to load param file if present"
   paramfile:
     value: "../params/Modi.yaml"
+  projectid:
+    value:
+      "MSPC001012"
   ROOTPATH:
     value: "/mnt/e/MSPC001012/"
   PROF_PATH:
@@ -31,8 +34,13 @@ params:
   cluster_methods:
     value: [kmeans]
   formula:
-    value: "~0+Extract_Genotype:Extract_Treatment"
+    value: "~0+Extract_Genotype"
     description: "will move to separate volcano.Rmd document in the future, probably"
+  contrasts:
+    value:
+      |
+      Extract_Genotype3617OE - Extract_Genotype3617EV
+      Extract_Genotype3968OE - Extract_Genotype3968EV 
   pca:
     value:
       color:
@@ -321,7 +329,9 @@ prof_gct <- subset_gct(prof_gct_merged, rid=rids_filtered)
 do_batch <- get_param(subparams$batchcorrection$do_batch_correction)
 batchvar <- get_param(subparams$batchcorrection$batchvar)
 
-if (do_batch == TRUE){
+cat(paste0("Do batch: ", do_batch, "\nBatchvar: ", batchvar))
+
+if (!is.null(do_batch) && do_batch == TRUE){
   
   batchvalues <- modi_gct@cdesc[[batchvar]] %>% as.character()
   mat_combat <- sva::ComBat(modi_gct@mat, batchvalues)
@@ -343,11 +353,16 @@ if (do_batch == TRUE){
 # if not true
 ```
 ```{r, label=modi-export-normalized}
+do_batch <- get_param(subparams$batchcorrection$do_batch_correction)
+batchvar <- get_param(subparams$batchcorrection$batchvar)
+batchinfo <- ""
+if (!is.null(do_batch) && do_batch == TRUE) batchinfo <- paste0("_", batchvar)
+ 
 # TODO calculate file name dynamically based on normtype and batch info
-.file <- file.path(ROOTPATH, "MSPC000936_modi_log_batchcor")
+.file <- file.path(ROOTPATH, paste0("MSPC000936_modi_log", batchinfo))
 modi_gct %>% write_gct(.file, precision = 8)
 
-.file <- file.path(ROOTPATH, "MSPC000936_prof_log_batchcor")
+.file <- file.path(ROOTPATH, paste0("MSPC000936_prof_log", batchinfo))
 prof_gct %>% write_gct(.file, precision = 8)
 
   #write_gct(.file, precision = 8)
@@ -564,6 +579,7 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
 #cols_to_annotate <- c("Genotype", "recno")
 cols_to_annotate <- c("Extract_Treatment", "Extract_Genotype")
 # make_heatmap(modi_gct_batch, pos_sel = cols_to_annotate)
+cat(paste0("size of input matrix: ", dim(modi_gct_zscore@mat)[1]))
 make_heatmap(modi_gct_zscore, pos_sel = cols_to_annotate, column_title = "modi_zscore")
 ```
 
@@ -572,6 +588,7 @@ make_heatmap(modi_gct_zscore, pos_sel = cols_to_annotate, column_title = "modi_z
 #cols_to_annotate <- c("Genotype", "recno")
 cols_to_annotate <- c("Extract_Treatment", "Extract_Genotype")
 # make_heatmap(modi_gct_batch, pos_sel = cols_to_annotate)
+cat(paste0("size of input matrix: ", dim(prof_gct_zscore@mat)[1]))
 make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_zscore")
 ```
 
@@ -591,7 +608,7 @@ prof_correct_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
 
 
 ## heatmap prof
-```{r, label='modi-heatmap-prof', cache=FALSE, eval=T}
+```{r, label='modi-heatmap-prof', cache=TRUE, eval=T}
 
 pos_sel <- c("Extract_Treatment", "Extract_Genotype")
 cut_by <- "Extract_Genotype"
@@ -821,17 +838,27 @@ TODO: move to separate Rmd file
 
 ```{r, label='modi.limma.def', eval=T}
 
-formula <- get_param(subparams$formula) %>% as.formula()
 ( contrasts_str <- get_param(subparams$contrasts) )
-( contrasts_list <- strsplit(contrasts_str, "\n")[[1]] ) # strsplit returns vector array length 1
-( contrasts_list <- purrr::map(contrasts_list, 
-                               ~gsub("^['\"]|['\"]$", "", .) )
-                               ) %>% unlist
+if (!is.null(contrasts_str)){
+  ( contrasts_list <- strsplit(contrasts_str, "\n")[[1]] ) # strsplit returns vector array length 1
+  ( contrasts_list <- purrr::map(contrasts_list, 
+                                 ~gsub("^['\"]|['\"]$", "", .) )
+                                 ) %>% unlist
+  }
+if (is.null(contrasts_str)){
+  contrasts_list <- NULL
+  #combos <- combn(colnames(mod), 2)
+  #contrasts_list <- split(combos, col(combos))
+}
+
+formula <- get_param(subparams$formula) %>% as.formula()
 
 do_limma <- function(gct){
 #mod <- model.matrix(~0 + genotype, modi@cdesc)
   mod <- model.matrix(formula, gct@cdesc)
   colnames(mod) <- make.names(colnames(mod)) #where is this used
+  
+    
   limma_input <- gct %>% mat()
   limma_input <- limma_input[ ,rownames(mod) ]
   #contrast_list <- c(
@@ -888,13 +915,17 @@ limma_res_modi_withmeta <- limma_res_modi_withmeta %>%
 #.order <- c(
 #  
 #)
-.file <- file.path(ROOTPATH, "MSPC000936_limma_res_modi.tsv")
+projectid <- get_param(subparams$projectid)
+if (is.null(projectid)) projectid <- "MSPC"
+.n <- paste0(projectid, "limma_res_modi.tsv")
+.file <- file.path(ROOTPATH, .n)
 limma_res_modi_withmeta %>% write_tsv(.file)
 
 limma_res_modi_wide <- limma_res_modi %>%  pivot_wider(id_cols = GeneSymbolSite, names_from = contrast,
                                values_from = c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B")
                                )
-.file <- file.path(ROOTPATH, "MSPC000936_limma_res_modi_wide.tsv")
+.n <- paste0(projectid, "limma_res_modi_wide.tsv")
+.file <- file.path(ROOTPATH, .n)
 limma_res_modi_wide %>% write_tsv(.file)
 
 ```

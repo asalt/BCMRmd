@@ -15,9 +15,9 @@ dist_no_na <- function(mat) {
   edist <- dist(mat)
   return(edist)
 }
-make_new_gct <- function(gct, mat, cdesc=NULL, rdesc=NULL, cid=NULL, rid=NULL) {
+make_new_gct <- function(gct, mat, cdesc = NULL, rdesc = NULL, cid = NULL, rid = NULL) {
   # make a new gct object with the same metadata as the original
-  #browser()
+  # browser()
 
   if (is.null(cdesc)) {
     .cdesc <- gct@cdesc
@@ -39,7 +39,7 @@ make_new_gct <- function(gct, mat, cdesc=NULL, rdesc=NULL, cid=NULL, rid=NULL) {
   } else {
     .rid <- rid
   }
-  #browser()
+  # browser()
 
   new("GCT", mat = mat, rid = .rid, cid = .cid, rdesc = .rdesc, cdesc = .cdesc, )
 }
@@ -55,7 +55,7 @@ recycle_colors <- function(type = "qual", n = 8) {
   "3458",
   "3558",
   "7124"
-  )
+)
 make_random_gct <- function() {
   set.seed(369)
   .mat <- matrix(runif(10000), nrow = 1000, ncol = 10)
@@ -70,7 +70,7 @@ make_random_gct <- function() {
 }
 
 
-read_rmd_params <- function(.file){
+read_rmd_params <- function(.file) {
   library(yaml)
   header <- readLines(.file)
   start_index <- which(header == "---")[1]

@@ -7,6 +7,7 @@ routines:
   E2G: FALSE
   MASIC: TRUE
   denovo: FALSE
+  PHOS: TRUE
 MASIC:
     value:
       ROOTPATH:

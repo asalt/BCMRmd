@@ -1,10 +1,11 @@
 ---
 title: "Modi"
-author: "AlexSaltman"
+author: "BCM Proteomics Core"
 date: "`r Sys.Date()`"
 # runtime: shiny
 output:
   html_document:
+    keep_md: true
     code_folding: hide
     highlight: zenburn # pygments, kate, monochrome, zenburn
     toc: yes
@@ -13,7 +14,7 @@ params:
     value: TRUE
     description: "Boolean value whether or not to load param file if present"
   paramfile:
-    value: "../params/Modi.yaml"
+    value: "../../MSPC000936/MSPC000936_BCMRmd.yaml"
   projectid:
     value:
       "MSPC001012"
@@ -40,7 +41,7 @@ params:
     value:
       |
       Extract_Genotype3617OE - Extract_Genotype3617EV
-      Extract_Genotype3968OE - Extract_Genotype3968EV 
+      Extract_Genotype3968OE - Extract_Genotype3968EV
   pca:
     value:
       color:
@@ -102,6 +103,61 @@ library(tibble)
 library(magrittr)
 source("funcs.R")
 
+
+# https://stackoverflow.com/questions/69353667/dynamic-creation-of-tabs-in-rmarkdown-does-not-work-for-ggplot-while-it-does-for
+# not sure if I want to use this - maybe just spin this kind of thing out into a new netebook.
+in_tabs <- function(l, labels = names(l), level, knit = TRUE, close_tabset = FALSE, id) {
+  if (is.null(labels)) {
+    stop("labels are NULL, it is required not to be so that the tabs have proper names")
+  }
+  names(l) <- labels
+
+  rmd_code <- lapply(seq_along(l), FUN = function(i) obj_to_rmd(l[[i]], name = names(l)[i], level = level + 1L, id = paste(id, i, sep = "-")))
+  
+  if (isTRUE(getOption("knitr.in.progress"))) {
+    res <- knitr::knit(text = unlist(rmd_code), quiet = TRUE)
+    cat(res)
+  } else {
+    if (!knit) {
+      cat(unlist(rmd_code))
+    } else {
+      return(l)
+    }
+  }
+  if (close_tabset) {
+    cat(paste(get_section(level), "{.unlisted .unnumbered .toc-ignore .tabset}", "\n"))
+  }
+}
+
+get_section <- function(level) {
+  paste(rep("#", times = level), collapse = "")
+}
+
+get_tabset <- function(obj) {
+  if (inherits(obj, "list")) "{.tabset}" else ""
+}
+
+obj_to_rmd <- function(obj, parent_name = "l", name, level, id) {
+  section_code <- sprintf("%s %s %s\n", get_section(level), name, get_tabset(obj))
+  if (!inherits(obj, "list")) {
+    rmd_code <- c(
+      sprintf("```{r plot-%s, echo = FALSE}\n", id),
+      sprintf("%s$`%s`\n", parent_name, name),
+      "```\n",
+      "\n"
+    )
+  } else {
+    rmd_code <- c(
+      "\n",
+      lapply(
+        X = seq_along(obj),
+        FUN = function(i) obj_to_rmd(obj[[i]], sprintf("%s$`%s`", parent_name, name), names(obj)[i], level + 1L)
+      )
+    )
+  }
+  return(c(section_code, rmd_code))
+}
+#
 mykable <- function(data) {
     knitr::kable(data, booktabs = TRUE, digits = 4) %>%
         kable_styling(latex_options = c("striped", "scale_down"),
@@ -132,6 +188,9 @@ if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
   cat(paste("loading", .f))
   #params <- modifyList(params, local_params)
 } else{
+  if ( fs::file_exists(.f) == FALSE ) {
+    cat(paste0(.f, " does not exist! ") ) 
+  }
   subparams <- params
 }
 # cat(paste(subparams))
@@ -148,6 +207,7 @@ if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
 
 ROOTPATH <- get_param(subparams$ROOTPATH)
 PROF_PATH <- fs::path(ROOTPATH, get_param(subparams$PROF_PATH))
+#PROF_PATH <- file.path(ROOTPATH, get_param(subparams$PROF_PATH))
 MODI_PATH <- fs::path(ROOTPATH, get_param(subparams$MODI_PATH))
 # modi_PATH <- fs::path_abs(subparams$modi_PATH)
 
@@ -177,7 +237,12 @@ modi_files <- MODI_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
 
 #prof_gcts <- prof_files %>% purrr::map(cmapR::parse_gctx)
 prof_gcts <- prof_files %>% purrr::map(cmapR::parse_gctx)
+
+# prof_gcts %>% map( ~ dim( .x@rdesc ) ) %>% cat(paste0("profiling files\n", .)) # does not work
+
 modi_gcts <- modi_files %>% purrr::map(cmapR::parse_gctx)
+
+#  modi_gcts %>% map( ~ dim( .x@rdesc ) ) %>% cat(paste0("modi_gcts files\n", .)) # does not work
 # need to remove sample identifying info that is in the rdesc
 cols_to_drop <- c("recno", "runno", "searchno", "basename", "TopScore", "TaxonID")
 modi_gcts <- purrr::map(modi_gcts, function(gct) {
@@ -189,12 +254,12 @@ modi_gcts <- purrr::map(modi_gcts, function(gct) {
 
 modi_gcts <- purrr::map(modi_gcts, function(gct) {
   if ("taxon" %in% colnames(gct@rdesc) & (!"TaxonID" %in% colnames(gct@rdesc))) {
-    gct@rdesc$TaxonID <- gct@rdesc$taxon 
+    gct@rdesc$TaxonID <- gct@rdesc$taxon
   }
   return(gct)  # ensure the modified gct is returned
 })
 
-  
+
 cdesc_cols_to_drop <- c("TaxonID")
 modi_gcts <- purrr::map(modi_gcts, function(gct) {
   gct@cdesc <- gct@cdesc[, !colnames(gct@cdesc) %in% cdesc_cols_to_drop]
@@ -234,28 +299,41 @@ modi_gcts_filtered <- modi_gcts %>%
 ```
 
 
-## normalize here
+## normalization
 
 ```{r label=normalize}
 
+# gct <- prof_gcts[[1]]
+# 
+# gct@rdesc %>% dim()
 
 normalize <- function(gct){
-  
+
   dfm <- gct %>% melt_gct()
+  
+  .counts <- dfm %>% group_by(id.x) %>% summarize(not_na = sum(value!=0 & !is.na(value)) )%>% arrange(not_na)
+  .keeps <- .counts[ .counts$not_na == max(.counts$not_na), ]
+  dfm <- dfm[ id.x %in% .keeps$id.x, ]
+  
   smallval <- min(dfm[ dfm$value != 0, "value" ], na.rm=T) / 2
+  #smallval <- 1e-7 #  note we are fixing it at one value temporarily
   dfm[ dfm$value == 0, "value"] <- smallval
+  #dfm[ dfm$value == 0, "value"] <- NA
   dfm[ is.na(dfm$value), "value"] <- smallval
-  #mutate(value = value / min(value[value != 0], na.rm=T)) %>% 
-  dfm <- dfm %>% 
+  #mutate(value = value / min(value[value != 0], na.rm=T)) %>%
+  
+  dfm <- dfm %>%
     group_by(id.y, TaxonID) %>%
     mutate(mednorm = (value / median(value, na.rm=TRUE) ) ) %>%
     mutate(logmednorm = log(mednorm)) %>%
-    ungroup() %>% 
+    ungroup() %>%
     mutate(logmednorm = logmednorm + abs(min(logmednorm)))
   mat_log <- dfm %>% pivot_wider(id_cols=id.x, names_from=id.y, values_from=logmednorm ) %>% as.data.frame
   rownames(mat_log) <- mat_log$id.x
   mat_log$id.x <- NULL
-  gct_norm_log <- gct %>% cmapR::GCT(mat = as.matrix(mat_log), rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+  .rids <- rownames(mat_log)
+  .rdesc <- gct@rdesc[ .rids, ]
+  gct_norm_log <- gct %>% cmapR::GCT(mat = as.matrix(mat_log), rid = .rids, cid = .@cid, cdesc = .@cdesc, rdesc = .rdesc)
   gct_norm_log
 }
 
@@ -275,6 +353,13 @@ prof_gcts_norm_log[[1]] %>% melt_gct() %>% filter(!is.na(TaxonID) & TaxonID != "
 ```
 
 ```{r, label='modi-reduce-merge'}
+fillna <- function(mat){
+  mat %>% mn
+  
+  smallval <- min(dfm[ dfm$value != 0, "value" ], na.rm=T) / 2
+  dfm[ dfm$value == 0, "value"] <- smallval
+  dfm[ is.na(dfm$value), "value"] <- smallval
+}
 
 modi_gct_merged <- base::Reduce(accumulate=F,
                     f=function(...) cmapR::merge_gct(..., dim="col"),
@@ -294,7 +379,7 @@ ridcounts <- left_join(ridcounts, .table, by = 'id.x')
 
 # here filter for species
 #.species_filter <- modi_gct_merged@rdesc   #no filter
-.species_filter <- modi_gct_merged@rdesc %>% dplyr::filter(TaxonID=="10090")
+.species_filter <- modi_gct_merged@rdesc %>% dplyr::filter(TaxonID=="9606")
 ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
 
 rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
@@ -311,7 +396,7 @@ ridcounts <- prof_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count
 ridcounts$GeneID <- ridcounts$id.x #this is true for profiling data
 .maxval <- max(ridcounts$count)
 
-.species_filter <- prof_gct_merged@rdesc %>% dplyr::filter(TaxonID == "10090")
+.species_filter <- prof_gct_merged@rdesc %>% dplyr::filter(TaxonID == "9606")
 ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
 
 rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
@@ -332,17 +417,22 @@ batchvar <- get_param(subparams$batchcorrection$batchvar)
 cat(paste0("Do batch: ", do_batch, "\nBatchvar: ", batchvar))
 
 if (!is.null(do_batch) && do_batch == TRUE){
-  
+
   batchvalues <- modi_gct@cdesc[[batchvar]] %>% as.character()
-  mat_combat <- sva::ComBat(modi_gct@mat, batchvalues)
+  mat_combat <- sva::ComBat(modi_gct@mat, batch = batchvalues, mean.only = FALSE, prior.plots = TRUE)
   modi_gct_batch <- cmapR::GCT(mat = mat_combat, cid = modi_gct@cid, cdesc = modi_gct@cdesc, rdesc = modi_gct@rdesc)
   modi_gct <- modi_gct_batch
-  
-  
+
+
   #batchinfo <- prof_gct@cdesc %>% mutate(id=factor(id, levels=colnames(mat_log), ordered=TRUE)) %>% arrange(id)
   #batchinfo <- prof_gct_log@cdesc[[batchvar]] %>% as.character()
   batchvalues <- prof_gct@cdesc[[batchvar]] %>% as.character()
-  mat_combat <- sva::ComBat(prof_gct@mat, batchvalues)
+  mat_combat <- sva::ComBat(prof_gct@mat, batch = batchvalues, mean.only=FALSE, prior.plots = TRUE)
+  #nas <- sum(apply(is.na(mat_combat), 1, any))
+
+  
+  
+  # mat_combat %>% 
   prof_gct_batch <- prof_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
   #prof_gct_norm_log <- prof_gct_batch
   prof_gct <- prof_gct_batch
@@ -352,12 +442,36 @@ if (!is.null(do_batch) && do_batch == TRUE){
 #modi_gct_norm_log <- modi_gct %>% cmapR::GCT(mat = mat_log, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
 # if not true
 ```
+
+## zscore
+
+```{r, label=modi.zscore}
+
+zscore_gct <- function(gct){
+
+  .tmp <- gct %>%
+    melt_gct() %>%
+    group_by(id.x) %>%
+    mutate(zscore = myzscore(value)) %>%
+    ungroup()
+  mat_zscore <- .tmp %>%  pivot_wider(id_cols=id.x, names_from=id.y, values_from=zscore) %>% as.data.frame
+  rownames(mat_zscore) <- mat_zscore$id.x
+  mat_zscore$id.x <- NULL
+  mat_zscore <- as.matrix(mat_zscore)
+
+  gct_zscore <- gct %>% cmapR::GCT(mat = mat_zscore, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
+
+}
+modi_gct_zscore <- zscore_gct(modi_gct)
+prof_gct_zscore <- zscore_gct(prof_gct)
+```
+## export transformed matrix
 ```{r, label=modi-export-normalized}
 do_batch <- get_param(subparams$batchcorrection$do_batch_correction)
 batchvar <- get_param(subparams$batchcorrection$batchvar)
 batchinfo <- ""
 if (!is.null(do_batch) && do_batch == TRUE) batchinfo <- paste0("_", batchvar)
- 
+
 # TODO calculate file name dynamically based on normtype and batch info
 .file <- file.path(ROOTPATH, paste0("MSPC000936_modi_log", batchinfo))
 modi_gct %>% write_gct(.file, precision = 8)
@@ -371,27 +485,6 @@ prof_gct %>% write_gct(.file, precision = 8)
 
 ```
 
-```{r, label=modi.zscore}
-
-zscore_gct <- function(gct){
-  
-  .tmp <- gct %>%
-    melt_gct() %>%
-    group_by(id.x) %>%
-    mutate(zscore = myzscore(value)) %>%
-    ungroup()
-  mat_zscore <- .tmp %>%  pivot_wider(id_cols=id.x, names_from=id.y, values_from=zscore) %>% as.data.frame
-  rownames(mat_zscore) <- mat_zscore$id.x
-  mat_zscore$id.x <- NULL
-  mat_zscore <- as.matrix(mat_zscore)
-  
-  gct_zscore <- gct %>% cmapR::GCT(mat = mat_zscore, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
-  
-}
-modi_gct_zscore <- zscore_gct(modi_gct)
-prof_gct_zscore <- zscore_gct(prof_gct)
-```
-
 
 
 # Data overview
@@ -400,7 +493,7 @@ prof_gct_zscore <- zscore_gct(prof_gct)
 ### prof log
 ```{r, label='prof-dist-log2', eval=T}
 prof_gct %>% melt_gct() %>%
-  filter(TaxonID != "NaN") %>% 
+  filter(TaxonID != "NaN") %>%
   ggviolin(x="id.y", y="value", add = "median_mad", color = "TaxonID")  %>%
   ggpar(x.text.angle=90, title = "prof gct log")
 
@@ -408,25 +501,16 @@ prof_gct %>% melt_gct() %>%
 ### prof zscore
 ```{r, label='prof-dist-log', eval=T}
 prof_gct_zscore %>% melt_gct() %>%
-  filter(TaxonID != "NaN") %>% 
+  filter(TaxonID != "NaN") %>%
   ggviolin(x="id.y", y="value", add = "median_mad", color = "TaxonID")  %>%
-  ggpar(x.text.angle=90, title = "prof gct log")
+  ggpar(x.text.angle=90, title = "prof zscore")
 
 ```
-### prof zscore dist
-```{r, label='prof-dist-zscore', eval=T}
-prof_gct_zscore %>% melt_gct() %>%
-  filter(TaxonID != "NaN") %>% 
-  ggviolin(x="id.y", y="value", add = "median_mad", color = "TaxonID")  %>%
-  ggpar(x.text.angle=90, title="prof gct zscore")
-
-```
-
 ### prof zscore taxon
 ```{r}
 
 prof_gct_zscore %>% melt_gct() %>%
-  filter(TaxonID != "NaN") %>% 
+  filter(TaxonID != "NaN") %>%
   ggviolin(x="TaxonID", y="value", add = "median_mad")  %>%
   ggpar(x.text.angle=90, title="prof gct zscore")
 ```
@@ -436,10 +520,10 @@ prof_gct_zscore %>% melt_gct() %>%
 
 
 
-### modi
+### modi log
 ```{r, label='modi-dist-log', cache=TRUE, eval=T}
 modi_gct %>% melt_gct() %>%
-  filter(TaxonID != "NaN" & TaxonID != "nan") %>% 
+  filter(TaxonID != "NaN" & TaxonID != "nan") %>%
   ggviolin(x="id.y", y="value", add = "median_mad", color = "TaxonID")  %>%
   ggpar(x.text.angle=90, title="modi gct")
 ```
@@ -447,7 +531,7 @@ modi_gct %>% melt_gct() %>%
 ### modi zscore
 ```{r, label='modi-dist-zscore', cache=TRUE, eval=T}
 modi_gct_zscore %>% melt_gct() %>%
-  filter(TaxonID != "NaN" & TaxonID != "nan") %>% 
+  filter(TaxonID != "NaN" & TaxonID != "nan") %>%
   ggviolin(x="id.y", y="value", add = "median_mad", color = "TaxonID")  %>%
   ggpar(x.text.angle=90, title="modi gct zscore")
 ```
@@ -455,18 +539,19 @@ modi_gct_zscore %>% melt_gct() %>%
 ### modi zscore taxon
 ```{r, label='modi-dist-zscore-taxon', cache=TRUE, eval=T}
 modi_gct_zscore %>% melt_gct() %>%
-  filter(TaxonID != "NaN" & TaxonID != "nan") %>% 
+  filter(TaxonID != "NaN" & TaxonID != "nan") %>%
   ggviolin(x="TaxonID", y="value", add = "median_mad", color = "TaxonID")  %>%
   ggpar(x.text.angle=90, title="modi gct zscore")
 ```
 
 
+# heatmaps
 
 ## heatmap def
 ```{r, label='modi-heatmap-def', include=T, eval=T}
 make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, cluster_rows=T, cluster_columns=T, width=9, height=12, ...){
   .more_params = list(...)
-  .negsel <- c("sample", "plex", "recno",
+  .negsel <- c("sample", "plex", #"recno",
                "runno", "searchno", "assay", "replicate", "name",
                "lu",
                "ProtocolNo",
@@ -493,7 +578,7 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
                "ExpSearchNo"
                )
   .column_df <- .gct@cdesc %>% select(-any_of(.negsel))
-  
+
 
   column_split <- NULL
   if (!is.null(cut_by)) {
@@ -502,7 +587,7 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
     }
     #.column_df <- .column_df %>% arrange(!!cut_by)
     column_split <- lapply(.column_df[cut_by], as.factor)
-  } 
+  }
 
   recycle_colors <- function(type = "qual", n = 8) {
     # original_palette <- brewer_pal(palette = palette_name)(min(n, 8))
@@ -513,10 +598,13 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
 
   # note we do not have the extra columns anymore
   .nocolor <- c("id")
-  if (!is.null(pos_sel)) .cols <- pos_sel
-  else .cols <- colnames(.column_df)
+  if (!is.null(pos_sel)){
+    .cols <- pos_sel
+  }  else {
+    .cols <- colnames(.column_df)
+  }
   .color_list <- .column_df[, .cols] %>%
-    select(-any_of(.nocolor)) %>% 
+    dplyr::select(-any_of(.nocolor)) %>% 
     as.list() %>%
     map(~ recycle_colors(n = length(unique(.))))
 
@@ -546,6 +634,7 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
   mat <- mat(.gct)
   mat <- mat[, .gct@cdesc$id] # make sure same order
   mat <- mat[, .column_df$id] # make sure same order
+  rownames(mat) <- .gct@rdesc[ rownames(mat), "GeneSymbol"]
 
   .h <- ComplexHeatmap::Heatmap(
     mat,
@@ -558,22 +647,24 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
     column_title_side = "top",
     column_title_rot = 0,
     column_names_gp = gpar(fontsize = 9),
-    row_names_gp = gpar(fontsize=5),
+    row_names_gp = gpar(fontsize=3),
     border = TRUE,
     use_raster = T,
     show_row_names = show_row_names,
     show_row_dend = T,
     cluster_rows = cluster_rows,
     cluster_columns = cluster_columns,
-    width = width,
-    height = height,
-    ...,
+    # width = width, # default 9
+    # height = height, # default 12
+    #...,
   )
   .h
 }
 ```
 
+## heatmaps { .tabset }
 
+### modi gct zscore
 ```{r, label="modi.modi_alldata_heatmap", eval=T, fig.height=8}
 #cols_to_annotate <- c("celltissue", "genotype")
 #cols_to_annotate <- c("Genotype", "recno")
@@ -583,42 +674,42 @@ cat(paste0("size of input matrix: ", dim(modi_gct_zscore@mat)[1]))
 make_heatmap(modi_gct_zscore, pos_sel = cols_to_annotate, column_title = "modi_zscore")
 ```
 
+### profiling zscore
+
 ```{r, label="modi-alldata-prof-heatmap", eval=T}
 #cols_to_annotate <- c("celltissue", "genotype")
 #cols_to_annotate <- c("Genotype", "recno")
 cols_to_annotate <- c("Extract_Treatment", "Extract_Genotype")
 # make_heatmap(modi_gct_batch, pos_sel = cols_to_annotate)
 cat(paste0("size of input matrix: ", dim(prof_gct_zscore@mat)[1]))
-make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_zscore")
+
+
+make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_zscore", width = 12, height = 20, cut_by = "Extract_Genotype")
 ```
 
 
-```{r, label="modi.somemplot", eval=F}
-prof_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
+### profiling zscore fullsize
+
+```{r, label='modi-alldata-prof-heatmap-names', fig.height=475, fig.width=12, include=F, eval=F}
+
+p <- make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_zscore", width = 12, height = 70, show_row_names = T, cut_by = "Extract_Genotype")
+grDevices::pdf("prof_fullsize.pdf", width=12, height=175)
+print(p)
+grDevices::dev.off()
 ```
 
-```{r, label="modi.someotherplot", eval=F}
-prof_correct_zscore %>% melt_gct() %>% ggviolin(x='id.y', y='value')
-```
-
-
-
-
-# heatmaps
-
-
-## heatmap prof
+### heatmap prof log norm
 ```{r, label='modi-heatmap-prof', cache=TRUE, eval=T}
 
 pos_sel <- c("Extract_Treatment", "Extract_Genotype")
 cut_by <- "Extract_Genotype"
 .width = 8
-.height = 14 
+.height = 14
 p <- make_heatmap(prof_gct, pos_sel = pos_sel, cut_by = NULL, show_row_names = F, column_title="log_norm_batch_corr")
 print(p )
 ```
 
-## heatmap modi
+### heatmap modi log norm
 ```{r, label='modi-heatmap-modi', cache=FALSE, eval=T}
 
 pos_sel <- c("Extract_Treatment", "Extract_Genotype")
@@ -630,6 +721,9 @@ print(p )
 #make_heatmap(modi)
 #make_heatmap(prof)
 ```
+
+
+
 
 
 
@@ -645,14 +739,11 @@ render PCA.Rmd
 render_pca_report <- function(center = T, scale = F, title="PCA", color=NULL, marker=NULL, ...) {
   .output_file_name <- paste0("PCA", "title_", title, "center_", center, "scale_", scale, ".html")
   #.output_file_name <- fs::path(params$ROOTPATH, .output_file_name)
-  
+
   # Capture additional arguments into a list
   additional_params <- list(...)
-
-  rmarkdown::render("PCA.Rmd",
-    output_file = .output_file_name,
-    quiet = T,
-    params = c(list(
+  
+  .params <- c(list(
       center = center,
       scale = scale,
       title = title,
@@ -662,6 +753,13 @@ render_pca_report <- function(center = T, scale = F, title="PCA", color=NULL, ma
       ),
       additional_params
     )
+  
+
+  rmarkdown::render("PCA.Rmd",
+    output_file = .output_file_name,
+    
+    quiet = T,
+    params = .params
     # params=.params,
     # envir = globalenv(),
     # envir = new_env
@@ -680,8 +778,8 @@ gct <- modi_gct
 .center <- T
 .scale <- T
 .pca_params <- get_param(subparams$pca)
-# get subset pca params 
-# there is no check here to see if it is defined in the yaml file, 
+# get subset pca params
+# there is no check here to see if it is defined in the yaml file,
 .color <- .pca_params$color %>% get_param()
 .marker <- .pca_params$marker %>% get_param()
 .annotate <- .pca_params$annotate %>% get_param()
@@ -708,7 +806,7 @@ gct <- modi_gct
 .center <- T
 .scale <- F
 .pca_params <- get_param(subparams$pca)
-# get subset pca params 
+# get subset pca params
 .color <- .pca_params$color %>% get_param()
 .marker <- .pca_params$marker %>% get_param()
 # .annotate <- .pca_params$annotate %>% get_param() # why is this n ot working?
@@ -747,8 +845,8 @@ gct <- prof_gct
 .center <- T
 .scale <- T
 .pca_params <- get_param(subparams$pca)
-# get subset pca params 
-# there is no check here to see if it is defined in the yaml file, 
+# get subset pca params
+# there is no check here to see if it is defined in the yaml file,
 .color <- .pca_params$color %>% get_param()
 .marker <- .pca_params$marker %>% get_param()
 .annotate <- .pca_params$annotate %>% get_param()
@@ -775,7 +873,7 @@ gct <- prof_gct
 .center <- T
 .scale <- F
 .pca_params <- get_param(subparams$pca)
-# get subset pca params 
+# get subset pca params
 .color <- .pca_params$color %>% get_param()
 .marker <- .pca_params$marker %>% get_param()
 # .annotate <- .pca_params$annotate %>% get_param() # why is this n ot working?
@@ -812,7 +910,7 @@ LINK
 make_p_table <- function(geneids){
   prof_gids <- intersect(geneids, prof_gct@rid)
   prof_expression_data <- mat(prof_gct)[prof_gids,]
-  
+
   modi_gids <- intersect(geneids, modi_gct_norm_log@rdesc$GeneID)
   .psites <- modi_gct_norm_log@rdesc[modi_gct_norm_log@rdesc$GeneID %in% geneids, ]
   modi_expression_data <- mat(modi_gct_norm_log)[rownames(.psites), ]
@@ -841,7 +939,7 @@ TODO: move to separate Rmd file
 ( contrasts_str <- get_param(subparams$contrasts) )
 if (!is.null(contrasts_str)){
   ( contrasts_list <- strsplit(contrasts_str, "\n")[[1]] ) # strsplit returns vector array length 1
-  ( contrasts_list <- purrr::map(contrasts_list, 
+  ( contrasts_list <- purrr::map(contrasts_list,
                                  ~gsub("^['\"]|['\"]$", "", .) )
                                  ) %>% unlist
   }
@@ -857,8 +955,8 @@ do_limma <- function(gct){
 #mod <- model.matrix(~0 + genotype, modi@cdesc)
   mod <- model.matrix(formula, gct@cdesc)
   colnames(mod) <- make.names(colnames(mod)) #where is this used
-  
-    
+
+
   limma_input <- gct %>% mat()
   limma_input <- limma_input[ ,rownames(mod) ]
   #contrast_list <- c(
@@ -886,7 +984,7 @@ limma_res_modi <- purrr::map_dfr(
   rownames_to_column("GeneSymbolSite") %>%
   mutate(contrast=.x)
 )
- 
+
 limma_res_modi_withmeta <- limma_res_modi %>% left_join(modi_gct@rdesc,
                              by = c('GeneSymbolSite' = 'id')
                              )
@@ -913,7 +1011,7 @@ limma_res_modi_withmeta <- limma_res_modi_withmeta %>%
   select(all_of(.front), everything())
 
 #.order <- c(
-#  
+#
 #)
 projectid <- get_param(subparams$projectid)
 if (is.null(projectid)) projectid <- "MSPC"
@@ -957,7 +1055,7 @@ modi_prof_stats <- left_join(limma_res_modi_withmeta,
           limma_res_prof_withmeta,
           by = c("GeneID", "contrast"),
           suffix = c(".modi", ".prof")
-          ) %>% 
+          ) %>%
   mutate(
     adj.P.Val.modi = replace_na(adj.P.Val.modi, 1),
     adj.P.Val.prof = replace_na(adj.P.Val.prof, 1),
@@ -968,41 +1066,51 @@ modi_prof_stats <- left_join(limma_res_modi_withmeta,
 modi_prof_stats %<>% mutate(
   SigCat = if_else(  !is.na(adj.P.Val.modi) & adj.P.Val.modi < 0.05 & !is.na(adj.P.Val.prof) & adj.P.Val.prof < 0.05, "Both Sig",
                      if_else(
-                       adj.P.Val.modi < 0.05 & adj.P.Val.prof >= 0.05, "modi Only",  
+                       adj.P.Val.modi < 0.05 & adj.P.Val.prof >= 0.05, "modi Only",
                        if_else(
-                         adj.P.Val.modi >= 0.05 & adj.P.Val.prof < 0.05, "Prof Only",  
+                         adj.P.Val.modi >= 0.05 & adj.P.Val.prof < 0.05, "Prof Only",
                          "Not Sig."
                      )
                      )
                      )
-  
+
 )
 modi_prof_stats %>% count(SigCat)
 ```
 
 ## results { .tabset }
 
-```{r, label='modi.2d.differential', eval=T, fig.width=5, fig.height=5, results='asis', cache=F}
-#modi_prof_stats %>% 
+```{r, label='modi.2d.differential', eval=T, fig.width=8, fig.height=8, results='asis', cache=F}
+#modi_prof_stats %>%
 
 plot_func <- function(df, contrast){
   cat(paste0("\n### ", contrast, "\n"))
-  
+
   .df <- df %>% filter(contrast == contrast)
-  
+   .title <- paste0('modi.2d.diff.', contrast)
+
    p <- ggpubr::ggscatter(
-     df,
+     .df,
     x="logFC.modi",
     y="logFC.prof",
     color = "SigCat",
     alpha=.25,
+    title = .title
   )
-   
+
+  #p
   print(p)
-  cat("\n")  # To ensure separation
+  plot.new()
+  dev.off()
+   # in_tabs(p)
+  cat("\n\n")  # To ensure separation
 }
 #plot_func(modi_prof_stats, unique(modi_prof_stats$contrast))
 unique( modi_prof_stats$contrast ) %>% walk( ~ plot_func( df = modi_prof_stats, contrast = . ) )
+
+.contrasts <- unique( modi_prof_stats$contrast )
+
+#plot_func()
 
 ```
 
@@ -1013,23 +1121,23 @@ unique( modi_prof_stats$contrast ) %>% walk( ~ plot_func( df = modi_prof_stats, 
 contrast1 <- c(modi_prof_stats$contrast %>% unique)[1]
 
 plot_contrast_top50 <- function(contrast){
-  
+
   cat(paste0("\n### ", contrast, "\n"))
   #print(contrast)
-  .sel <- modi_prof_stats %>% 
-    filter(contrast == !!contrast) %>% 
-    arrange(P.Value.modi) %>% 
+  .sel <- modi_prof_stats %>%
+    filter(contrast == !!contrast) %>%
+    arrange(P.Value.modi) %>%
     head(50)
   geneids <- .sel$GeneID
   .rids <- modi_gct_norm_log@rdesc %>% filter(GeneID %in% geneids) %>% pull(id)
   #make_p_table(geneids)
   .gct <-subset_gct(modi_gct_zscore, rid=.rids)
-  
+
   pos_sel <- c("Extract_Treatment", "Extract_Genotype")
   #cut_by <- "Extract_Treatment"
   cut_by <- "Extract_Genotype"
   .width = 9
-  .height = 16 
+  .height = 16
   p <- .gct %>% make_heatmap(pos_sel = pos_sel, cut_by = cut_by, show_row_names = T, column_title=contrast,
                              width = .width, height = .height
                              )

@@ -46,7 +46,7 @@ params:
 ---
 
 
-```{r, label=pca.setup, include=F}
+```{r, label=pca.setup, include=T}
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(cmapR))
 suppressPackageStartupMessages(library(tidyr))
@@ -58,8 +58,8 @@ suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(PCAtools))
 # library(PCAtools)
 knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_chunk$set(message = params$logging$MESSAGE)
-knitr::opts_chunk$set(warning = params$logging$WARNING)
+#knitr::opts_chunk$set(message = params$logging$MESSAGE)
+#knitr::opts_chunk$set(warning = params$logging$WARNING)
 source("funcs.R")
 get_param <- function(param){
   if(is.list(param) && "value" %in% names(param)){
@@ -69,7 +69,7 @@ get_param <- function(param){
   }
 }
 
-.f <- get_param(params$paramfile)
+#.f <- get_param(params$paramfile)
 if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
   subparams <- yaml::yaml.load_file(.f)
   cat(paste("loading", .f))
@@ -81,12 +81,12 @@ if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
 
 
 ```{r, label=pca.title, include=T}
-subparams$title
+get_param(subparams$title)
 ```
 
 
 ```{r, label=pca.environment, include=F}
-method <- subparams$method
+method <- subparams$method %>% get_param()
 # check if .gct obj is in environment
 if (!exists("gct")) {
   set.seed(369)
@@ -132,8 +132,10 @@ gct@mat %>% head()
 # id.y is sample
 # .center <- TRUE
 # .scale <- TRUE
-.center <- subparams$center
-.scale <- subparams$scale
+.center <- subparams$center %>% get_param()
+.scale <- subparams$scale %>% get_param()
+if (is.null(.center)) .center <- TRUE
+if (is.null(.scale)) .scale <- TRUE
 # (.center)
 # (.scale)
 .rescaled_gct_mat <- gct %>%
@@ -144,14 +146,23 @@ gct@mat %>% head()
       value, # expression value after cmapR::melt_gct
       center = !!.center,
       scale = !!.scale
-    )
+    )[,1] # this ensure we return a 1D vector
   ) %>%
   ungroup
 # drop anything that has a value of NaN. There probably should not be any Nans, but even if there are we will not deal with that here.
 # .rescaled_gct_mat %>% filter(is.na(value))  # are there any?
+.minval <- .rescaled_gct_mat$value %>% min(na.rm = T)
 #
-.rescaled_gct_mat[ is.na(.rescaled_gct_mat$value), 'value' ] <- 0
+.rescaled_gct_mat[ is.na(.rescaled_gct_mat$value), 'value' ] <- .minval *1.1
 #.rescaled_gct_mat %<>% filter(!is.na(value))
+
+.id_col <- "id.x"
+if ("GeneSymbol" %in% colnames(.rescaled_gct_mat)) {
+  .newnames <- do.call(paste, .rescaled_gct_mat[ , c("id.x", "GeneSymbol") ] )
+  .rescaled_gct_mat$id.x <- .newnames
+
+}
+
 .forpca <- .rescaled_gct_mat %>%
   mutate(id.x = as.character(id.x)) %>%
   pivot_wider(

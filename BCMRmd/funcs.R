@@ -1,10 +1,32 @@
-myzscore <- function(value, minval = NA, remask = TRUE) {
+# myzscore <- function(value, minval = NA, remask = TRUE) {
+#   mask <- is.na(value)
+#   if (is.na(minval)) {
+#     minval <- min(value, na.rm = TRUE)
+#   }
+#   value[is.na(value)] <- minval
+#   out <- scale(value)
+#   if (remask == TRUE) {
+#     out[mask] <- NA
+#   }
+#   return(out)
+# }
+myzscore <- function(value, minval = NA, remask = TRUE ) {
   mask <- is.na(value)
-  if (is.na(minval)) {
-    minval <- min(value, na.rm = TRUE)
+  if (is.na(minval)) minval <- min(value, na.rm = TRUE)
+
+  if (minval == Inf) {
+    minval <- 0
   }
+
   value[is.na(value)] <- minval
+  # todo make smaller than min val
   out <- scale(value)
+
+  # if all NA:
+  if (sum(!is.finite(out)) == length(out)) {
+    out[, 1] <- 0
+  }
+
   if (remask == TRUE) {
     out[mask] <- NA
   }

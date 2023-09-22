@@ -14,17 +14,17 @@ params:
     value: TRUE
     description: "Boolean value whether or not to load param file if present"
   paramfile:
-    value: "../../MSPC000936/MSPC000936_BCMRmd.yaml"
+    value: "/mnt/e/MSPC001012/config/Modi.yaml"
   projectid:
     value:
       "MSPC001012"
   ROOTPATH:
     value: "/mnt/e/MSPC001012/"
   PROF_PATH:
-    value: "./PROF/52603/52603_1_7"
+    value: "./PROF/"
     description: "directory location for profiling gct files"
   MODI_PATH:
-    value: "./diGG/52604_2_7/"
+    value: "./diGG/"
     description: "directory location for modi gct files"
   moditype:
     value:
@@ -113,7 +113,7 @@ in_tabs <- function(l, labels = names(l), level, knit = TRUE, close_tabset = FAL
   names(l) <- labels
 
   rmd_code <- lapply(seq_along(l), FUN = function(i) obj_to_rmd(l[[i]], name = names(l)[i], level = level + 1L, id = paste(id, i, sep = "-")))
-  
+
   if (isTRUE(getOption("knitr.in.progress"))) {
     res <- knitr::knit(text = unlist(rmd_code), quiet = TRUE)
     cat(res)
@@ -189,7 +189,7 @@ if (!is.null(.f) && fs::file_exists(.f) && params$use_paramfile == TRUE) {
   #params <- modifyList(params, local_params)
 } else{
   if ( fs::file_exists(.f) == FALSE ) {
-    cat(paste0(.f, " does not exist! ") ) 
+    cat(paste0(.f, " does not exist! ") )
   }
   subparams <- params
 }
@@ -294,6 +294,7 @@ subset_modi <- function(modi_gct){
 modi_gcts_filtered <- modi_gcts %>%
   purrr::map(subset_modi)
 
+#modi_gcts_filtered %>% purrr::map()
 
 #gct@rdesc <- gct@rdesc[, !colnames(gct@rdesc) %in% cols_to_drop]
 ```
@@ -301,27 +302,23 @@ modi_gcts_filtered <- modi_gcts %>%
 
 ## normalization
 
-```{r label=normalize}
-
-# gct <- prof_gcts[[1]]
-# 
-# gct@rdesc %>% dim()
+```{r, label=normalize}
 
 normalize <- function(gct){
 
   dfm <- gct %>% melt_gct()
-  
+
   .counts <- dfm %>% group_by(id.x) %>% summarize(not_na = sum(value!=0 & !is.na(value)) )%>% arrange(not_na)
   .keeps <- .counts[ .counts$not_na == max(.counts$not_na), ]
   dfm <- dfm[ id.x %in% .keeps$id.x, ]
-  
+
   smallval <- min(dfm[ dfm$value != 0, "value" ], na.rm=T) / 2
   #smallval <- 1e-7 #  note we are fixing it at one value temporarily
   dfm[ dfm$value == 0, "value"] <- smallval
   #dfm[ dfm$value == 0, "value"] <- NA
   dfm[ is.na(dfm$value), "value"] <- smallval
   #mutate(value = value / min(value[value != 0], na.rm=T)) %>%
-  
+
   dfm <- dfm %>%
     group_by(id.y, TaxonID) %>%
     mutate(mednorm = (value / median(value, na.rm=TRUE) ) ) %>%
@@ -344,18 +341,18 @@ prof_gcts_norm_log <- prof_gcts %>% purrr::map(normalize)
 
 ```
 
-```{r, label='modi-dist'}
-modi_gcts_norm_log[[1]] %>% melt_gct() %>% filter(TaxonID!="nan") %>% ggpubr::ggviolin(x='id.y', y='value', color = "TaxonID")
+```{r, label='modi-dist', include=F}
+#modi_gcts_norm_log[[1]] %>% melt_gct() %>% filter(TaxonID!="nan") %>% ggpubr::ggviolin(x='id.y', y='value', color = "TaxonID")
 ```
 
-```{r, label='prof-dist'}
+```{r, label='prof-dist', include=F}
 prof_gcts_norm_log[[1]] %>% melt_gct() %>% filter(!is.na(TaxonID) & TaxonID != "NaN") %>% ggpubr::ggviolin(x='id.y', y='value', color = "TaxonID")
 ```
 
 ```{r, label='modi-reduce-merge'}
 fillna <- function(mat){
   mat %>% mn
-  
+
   smallval <- min(dfm[ dfm$value != 0, "value" ], na.rm=T) / 2
   dfm[ dfm$value == 0, "value"] <- smallval
   dfm[ is.na(dfm$value), "value"] <- smallval
@@ -372,17 +369,17 @@ rownames(modi_gct_merged@rdesc) <- modi_gct_merged@rdesc$id # always called ID w
 
 cidcounts <- modi_gct_merged %>% melt_gct %>% group_by(recno, runno, searchno) %>% summarise(count=n_distinct(id.y)) %>% ungroup
 ridcounts <- modi_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count=n_distinct(id.y)) %>% ungroup
-.table <- modi_gct_merged@rdesc %>% rownames_to_column("id.x")
-ridcounts <- left_join(ridcounts, .table, by = 'id.x')
-.maxval <- max(ridcounts$count)
+# .table <- modi_gct_merged@rdesc %>% rownames_to_column("id.x")
+# ridcounts <- left_join(ridcounts, .table, by = 'id.x')
+# .maxval <- max(ridcounts$count)
 
 
 # here filter for species
 #.species_filter <- modi_gct_merged@rdesc   #no filter
-.species_filter <- modi_gct_merged@rdesc %>% dplyr::filter(TaxonID=="9606")
-ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
+#ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
 
-rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
+.species_filter <- modi_gct_merged@rdesc %>% dplyr::filter(TaxonID=="10090")
+rids_filtered <- .species_filter$id
 modi_gct <- subset_gct(modi_gct_merged, rid=rids_filtered)
 
 
@@ -392,18 +389,16 @@ prof_gct_merged <- base::Reduce(
 )
 rownames(prof_gct_merged@cdesc) <- prof_gct_merged@cdesc$id # always called ID when melting, taken from rownames
 rownames(prof_gct_merged@rdesc) <- prof_gct_merged@rdesc$id # always called ID when melting, taken from rownames
-ridcounts <- prof_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count=n_distinct(id.y)) %>% ungroup
-ridcounts$GeneID <- ridcounts$id.x #this is true for profiling data
-.maxval <- max(ridcounts$count)
+# ridcounts <- prof_gct_merged %>% melt_gct %>% group_by(id.x) %>% summarise(count=n_distinct(id.y)) %>% ungroup
+# ridcounts$GeneID <- ridcounts$id.x #this is true for profiling data
+# .maxval <- max(ridcounts$count)
 
-.species_filter <- prof_gct_merged@rdesc %>% dplyr::filter(TaxonID == "9606")
-ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
-
-rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
+# ridcounts <- ridcounts %>% filter(GeneID %in% .species_filter$GeneID)
+.species_filter <- prof_gct_merged@rdesc %>% dplyr::filter(TaxonID=="10090")
+rids_filtered <- .species_filter$id
+# rids_filtered <- ridcounts %>% filter(count >= .maxval) %>% pull(id.x)
 #prof_gct <- prof_gct_merged
 prof_gct <- subset_gct(prof_gct_merged, rid=rids_filtered)
-
-# # here filter for species
 
 ```
 
@@ -430,9 +425,9 @@ if (!is.null(do_batch) && do_batch == TRUE){
   mat_combat <- sva::ComBat(prof_gct@mat, batch = batchvalues, mean.only=FALSE, prior.plots = TRUE)
   #nas <- sum(apply(is.na(mat_combat), 1, any))
 
-  
-  
-  # mat_combat %>% 
+
+
+  # mat_combat %>%
   prof_gct_batch <- prof_gct %>% cmapR::GCT(mat = mat_combat, rid = .@rid, cid = .@cid, cdesc = .@cdesc, rdesc = .@rdesc)
   #prof_gct_norm_log <- prof_gct_batch
   prof_gct <- prof_gct_batch
@@ -473,10 +468,13 @@ batchinfo <- ""
 if (!is.null(do_batch) && do_batch == TRUE) batchinfo <- paste0("_", batchvar)
 
 # TODO calculate file name dynamically based on normtype and batch info
-.file <- file.path(ROOTPATH, paste0("MSPC000936_modi_log", batchinfo))
+#
+
+projectid <- get_param(subparams$projectid)
+.file <- file.path(ROOTPATH, paste0(projectid, "_modi_log", batchinfo))
 modi_gct %>% write_gct(.file, precision = 8)
 
-.file <- file.path(ROOTPATH, paste0("MSPC000936_prof_log", batchinfo))
+.file <- file.path(ROOTPATH, paste0(projectid, "_prof_log", batchinfo))
 prof_gct %>% write_gct(.file, precision = 8)
 
   #write_gct(.file, precision = 8)
@@ -604,7 +602,7 @@ make_heatmap <- function(.gct, show_row_names=F, cut_by=NULL, pos_sel=NULL, clus
     .cols <- colnames(.column_df)
   }
   .color_list <- .column_df[, .cols] %>%
-    dplyr::select(-any_of(.nocolor)) %>% 
+    dplyr::select(-any_of(.nocolor)) %>%
     as.list() %>%
     map(~ recycle_colors(n = length(unique(.))))
 
@@ -690,7 +688,7 @@ make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_z
 
 ### profiling zscore fullsize
 
-```{r, label='modi-alldata-prof-heatmap-names', fig.height=475, fig.width=12, include=F, eval=F}
+```{r, label='modi-alldata-prof-heatmap-names', include=F, eval=F}
 
 p <- make_heatmap(prof_gct_zscore, pos_sel = cols_to_annotate, column_title = "prof_zscore", width = 12, height = 70, show_row_names = T, cut_by = "Extract_Genotype")
 grDevices::pdf("prof_fullsize.pdf", width=12, height=175)
@@ -742,7 +740,7 @@ render_pca_report <- function(center = T, scale = F, title="PCA", color=NULL, ma
 
   # Capture additional arguments into a list
   additional_params <- list(...)
-  
+
   .params <- c(list(
       center = center,
       scale = scale,
@@ -753,11 +751,11 @@ render_pca_report <- function(center = T, scale = F, title="PCA", color=NULL, ma
       ),
       additional_params
     )
-  
+
 
   rmarkdown::render("PCA.Rmd",
     output_file = .output_file_name,
-    
+
     quiet = T,
     params = .params
     # params=.params,
@@ -1039,14 +1037,16 @@ limma_res_prof <- purrr::map_dfr(
 limma_res_prof_withmeta <- limma_res_prof %>% left_join(prof_gct@rdesc,
                              by = c('GeneID' = 'id')
                              )
-.file <- file.path(ROOTPATH, "MSPC000936_limma_res_prof.tsv")
+
+projectid <- get_param(subparams$projectid)
+.file <- file.path(ROOTPATH, paste0(projectid, "_limma_res_prof.tsv"))
 limma_res_prof_withmeta %>% write_tsv(.file)
 
 
 limma_res_prof_wide <- limma_res_prof_withmeta %>% pivot_wider(id_cols = GeneID, names_from = contrast,
                                values_from = c("logFC", "AveExpr", "t", "P.Value", "adj.P.Val", "B")
                                )
-.file <- file.path(ROOTPATH, "MSPC000936_limma_res_prof_wide.tsv")
+.file <- file.path(ROOTPATH, paste0(projectid, "_limma_res_prof_wide.tsv"))
 limma_res_prof_wide %>% write_tsv(.file)
 ```
 
@@ -1152,7 +1152,7 @@ modi_prof_stats$contrast %>% unique() %>% map(~plot_contrast_top50(.))
 
 
 
-```{r, label=modi.geneset.heatmap, fig.width=15, fig.height=9}
+```{r, label=modi.geneset.heatmap, fig.width=15, fig.height=9, eval=F}
 
 .smarcs_h <- modi_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "SMARC"))
 .smarcs_m <- modi_gct_zscore@rdesc %>% filter(str_detect(GeneSymbol, "Smarc"))

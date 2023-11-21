@@ -102,7 +102,7 @@ library(tidymodels)
 library(tibble)
 library(magrittr)
 source("funcs.R")
-
+knitr::opts_chunk$set(error=TRUE, warning=TRUE, message=TRUE)
 
 # https://stackoverflow.com/questions/69353667/dynamic-creation-of-tabs-in-rmarkdown-does-not-work-for-ggplot-while-it-does-for
 # not sure if I want to use this - maybe just spin this kind of thing out into a new netebook.
@@ -213,10 +213,10 @@ MODI_PATH <- fs::path(ROOTPATH, get_param(subparams$MODI_PATH))
 
 #prof_files <- PROF_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
 
-prof_files <- PROF_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
+prof_files <- PROF_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gctx?$")
 (prof_files)
 
-modi_files <- MODI_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gct")
+modi_files <- MODI_PATH %>% fs::dir_ls(recurse=T, regexp = "*.gctx?$")
 (modi_files)
 
 # parse_gct_dropzeros <- function (file){
@@ -255,6 +255,10 @@ modi_gcts <- purrr::map(modi_gcts, function(gct) {
 modi_gcts <- purrr::map(modi_gcts, function(gct) {
   if ("taxon" %in% colnames(gct@rdesc) & (!"TaxonID" %in% colnames(gct@rdesc))) {
     gct@rdesc$TaxonID <- gct@rdesc$taxon
+  }
+  if (!"TaxonID" %in% colnames(gct@rdesc)) {
+    print("NO TAXONID PRESENT, ASSUMING JUST 1")
+    gct@rdesc$TaxonID <- "default"
   }
   return(gct)  # ensure the modified gct is returned
 })
